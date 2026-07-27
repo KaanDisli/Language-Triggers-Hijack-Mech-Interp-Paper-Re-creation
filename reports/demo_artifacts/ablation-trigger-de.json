@@ -1,0 +1,72 @@
+{
+  "artifact_type": "head_ablation",
+  "condition": "trigger-de",
+  "model": "offline/tiny-random-llama-demo",
+  "ordered_heads": [
+    {
+      "layer": 0,
+      "head": 0
+    },
+    {
+      "layer": 0,
+      "head": 2
+    },
+    {
+      "layer": 0,
+      "head": 1
+    }
+  ],
+  "points": [
+    {
+      "num_heads": 0,
+      "selected_perplexity": 257.3653160873981,
+      "random_perplexity": 257.3653160873981,
+      "delta_perplexity": 0.0,
+      "random_std": 0.0
+    },
+    {
+      "num_heads": 1,
+      "selected_perplexity": 257.6365893887152,
+      "random_perplexity": 257.1692910229102,
+      "delta_perplexity": 0.46729836580499295,
+      "random_std": 0.01228009955192988
+    },
+    {
+      "num_heads": 2,
+      "selected_perplexity": 257.29318337168894,
+      "random_perplexity": 257.0895507825618,
+      "delta_perplexity": 0.2036325891271531,
+      "random_std": 0.13163552805085033
+    },
+    {
+      "num_heads": 3,
+      "selected_perplexity": 256.9776587296334,
+      "random_perplexity": 256.9941805042721,
+      "delta_perplexity": -0.0165217746387043,
+      "random_std": 0.1448272517922362
+    }
+  ],
+  "intervention": {
+    "hook": "attention output projection input (pre-W_O)",
+    "positions": "all prompt and teacher-forced continuation positions",
+    "value": "zero",
+    "ppl_reduction": "token-weighted corpus perplexity"
+  },
+  "metadata": {
+    "demo_only": true,
+    "seed": 17,
+    "dataset_kind": "four synthetic aligned examples",
+    "dataset_sha256": "0dc9d7356dfb8727fd7a815d420f7714d260665dfd12d7775e7e00a8da796118",
+    "tokenizer": "UTF-8 byte tokenizer",
+    "model_config_sha256": "27e48283ab891879bdf98451f58c0c03bad3154b812003c4866cbeaa0a3602d9",
+    "model_weights_sha256": "daa1c81a45db029c281cb3921a07801e2989560b2f20d65cdab7c06f3927b780",
+    "torch_version": "2.11.0+cu128",
+    "transformers_version": "5.14.1",
+    "trigger_set_ids": {
+      "fr": "synthetic-visible-fr-v1",
+      "de": "synthetic-visible-de-v1"
+    },
+    "paper_reproduction": false,
+    "overlap_policy": "joint-rank"
+  }
+}

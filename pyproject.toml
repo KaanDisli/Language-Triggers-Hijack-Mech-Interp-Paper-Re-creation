@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trigger-heads"
+version = "0.2.0"
+description = "Learned language-trigger training and paper-inspired causal circuit analysis"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Reproduction contributors" }]
+dependencies = [
+  "torch>=2.2",
+  "transformers>=4.48,<6",
+  "accelerate>=0.33",
+]
+
+[project.optional-dependencies]
+plots = ["matplotlib>=3.8"]
+data = ["datasets>=2.20"]
+train = ["peft>=0.13,<1"]
+test = ["pytest>=8"]
+notebook = ["ipykernel>=6.29,<8", "nbclient>=0.10,<1", "nbformat>=5.10,<6"]
+
+[project.scripts]
+trigger-heads = "trigger_heads.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

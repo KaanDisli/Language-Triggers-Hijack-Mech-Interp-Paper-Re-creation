@@ -1,0 +1,60 @@
+{
+  "artifact_type": "head_patching",
+  "condition": "language-it",
+  "model": "offline/tiny-random-llama-demo",
+  "num_examples": 4,
+  "baseline_mean_logprob": -5.446282148361206,
+  "scores": [
+    [
+      0.002784132957458496,
+      0.001109004020690918,
+      0.0011795759201049805,
+      0.0001285076141357422
+    ],
+    [
+      -0.0018832683563232422,
+      -0.0007774829864501953,
+      -0.0003598928451538086,
+      0.00040471553802490234
+    ]
+  ],
+  "top_heads": [
+    {
+      "layer": 0,
+      "head": 0,
+      "delta_logprob": 0.002784132957458496
+    },
+    {
+      "layer": 0,
+      "head": 2,
+      "delta_logprob": 0.0011795759201049805
+    },
+    {
+      "layer": 0,
+      "head": 1,
+      "delta_logprob": 0.001109004020690918
+    }
+  ],
+  "mean_activations_file": "language-it.means.pt",
+  "intervention": {
+    "hook": "attention output projection input (pre-W_O)",
+    "position": "last non-padding prompt token",
+    "clean_reduction": "condition mean"
+  },
+  "metadata": {
+    "demo_only": true,
+    "seed": 17,
+    "dataset_kind": "four synthetic aligned examples",
+    "dataset_sha256": "0dc9d7356dfb8727fd7a815d420f7714d260665dfd12d7775e7e00a8da796118",
+    "tokenizer": "UTF-8 byte tokenizer",
+    "model_config_sha256": "27e48283ab891879bdf98451f58c0c03bad3154b812003c4866cbeaa0a3602d9",
+    "model_weights_sha256": "daa1c81a45db029c281cb3921a07801e2989560b2f20d65cdab7c06f3927b780",
+    "torch_version": "2.11.0+cu128",
+    "transformers_version": "5.14.1",
+    "trigger_set_ids": {
+      "fr": "synthetic-visible-fr-v1",
+      "de": "synthetic-visible-de-v1"
+    },
+    "paper_reproduction": false
+  }
+}

@@ -1,0 +1,712 @@
+{
+  "title": "Legacy trigger-circuit implementation smoke test",
+  "generated_at": "2026-07-26T21:52:29+00:00",
+  "model": {
+    "name": "offline/tiny-random-llama-demo",
+    "layers": 2,
+    "heads": 4,
+    "hidden_size": 16,
+    "parameters": 12944,
+    "seed": 17,
+    "status": "randomly initialized; never trained on language or triggers"
+  },
+  "run": {
+    "examples": 4,
+    "conditions": 6,
+    "top_k": 3,
+    "elapsed_seconds": 0.7459651000099257,
+    "head_grid_size": 8,
+    "condition_head_interventions": 48,
+    "artifact_directory": "reports\\demo_artifacts"
+  },
+  "validation": {
+    "status": "PASS",
+    "tests_status": "PASS",
+    "tests_passed": 73,
+    "tests_skipped": 0,
+    "test_seconds": 8.81,
+    "checks": [
+      "all six head score grids have the expected shape and finite values",
+      "French and German trigger spans preserve their 9/8-token alignment",
+      "layer/token patching grids are finite and have one column per trigger token",
+      "every saved JSON/tensor value and provenance record round-trips exactly",
+      "both German prompt-setup ablation curves contain an exact zero-intervention baseline"
+    ]
+  },
+  "head_scores": {
+    "trigger-fr": [
+      [
+        0.0015314817428588867,
+        0.0011304616928100586,
+        0.0019388198852539062,
+        -0.0007342100143432617
+      ],
+      [
+        -0.0010716915130615234,
+        -0.001142263412475586,
+        -0.0019507408142089844,
+        -0.000278472900390625
+      ]
+    ],
+    "trigger-de": [
+      [
+        0.000708460807800293,
+        -0.00010395050048828125,
+        -0.0001894235610961914,
+        -0.00028526782989501953
+      ],
+      [
+        -0.00021195411682128906,
+        -0.00038623809814453125,
+        -0.0005438327789306641,
+        0.00012981891632080078
+      ]
+    ],
+    "language-fr": [
+      [
+        0.0028384923934936523,
+        0.0010603666305541992,
+        -0.00020253658294677734,
+        0.0002561807632446289
+      ],
+      [
+        -0.0004329681396484375,
+        -8.702278137207031e-06,
+        0.0008527040481567383,
+        -4.553794860839844e-05
+      ]
+    ],
+    "language-de": [
+      [
+        0.0016715526580810547,
+        -0.00015604496002197266,
+        0.0007841587066650391,
+        -0.0004996061325073242
+      ],
+      [
+        0.0005292892456054688,
+        -0.00023090839385986328,
+        0.0012816190719604492,
+        -0.00048339366912841797
+      ]
+    ],
+    "language-it": [
+      [
+        0.002784132957458496,
+        0.001109004020690918,
+        0.0011795759201049805,
+        0.0001285076141357422
+      ],
+      [
+        -0.0018832683563232422,
+        -0.0007774829864501953,
+        -0.0003598928451538086,
+        0.00040471553802490234
+      ]
+    ],
+    "language-es": [
+      [
+        0.003016352653503418,
+        0.0013817548751831055,
+        -0.00028645992279052734,
+        0.0001493692398071289
+      ],
+      [
+        -0.0016552209854125977,
+        -0.0006730556488037109,
+        -0.0005534887313842773,
+        -0.00011420249938964844
+      ]
+    ]
+  },
+  "baselines": {
+    "trigger-fr": -5.548252105712891,
+    "trigger-de": -5.573349356651306,
+    "language-fr": -5.446282148361206,
+    "language-de": -5.446282148361206,
+    "language-it": -5.446282148361206,
+    "language-es": -5.446282148361206
+  },
+  "top_heads": {
+    "trigger-fr": [
+      {
+        "layer": 0,
+        "head": 2,
+        "score": 0.0019388198852539062
+      },
+      {
+        "layer": 0,
+        "head": 0,
+        "score": 0.0015314817428588867
+      },
+      {
+        "layer": 0,
+        "head": 1,
+        "score": 0.0011304616928100586
+      }
+    ],
+    "trigger-de": [
+      {
+        "layer": 0,
+        "head": 0,
+        "score": 0.000708460807800293
+      },
+      {
+        "layer": 1,
+        "head": 3,
+        "score": 0.00012981891632080078
+      },
+      {
+        "layer": 0,
+        "head": 1,
+        "score": -0.00010395050048828125
+      }
+    ],
+    "language-fr": [
+      {
+        "layer": 0,
+        "head": 0,
+        "score": 0.0028384923934936523
+      },
+      {
+        "layer": 0,
+        "head": 1,
+        "score": 0.0010603666305541992
+      },
+      {
+        "layer": 1,
+        "head": 2,
+        "score": 0.0008527040481567383
+      }
+    ],
+    "language-de": [
+      {
+        "layer": 0,
+        "head": 0,
+        "score": 0.0016715526580810547
+      },
+      {
+        "layer": 1,
+        "head": 2,
+        "score": 0.0012816190719604492
+      },
+      {
+        "layer": 0,
+        "head": 2,
+        "score": 0.0007841587066650391
+      }
+    ],
+    "language-it": [
+      {
+        "layer": 0,
+        "head": 0,
+        "score": 0.002784132957458496
+      },
+      {
+        "layer": 0,
+        "head": 2,
+        "score": 0.0011795759201049805
+      },
+      {
+        "layer": 0,
+        "head": 1,
+        "score": 0.001109004020690918
+      }
+    ],
+    "language-es": [
+      {
+        "layer": 0,
+        "head": 0,
+        "score": 0.003016352653503418
+      },
+      {
+        "layer": 0,
+        "head": 1,
+        "score": 0.0013817548751831055
+      },
+      {
+        "layer": 0,
+        "head": 3,
+        "score": 0.0001493692398071289
+      }
+    ]
+  },
+  "overlap": {
+    "labels": [
+      "trigger-fr",
+      "trigger-de",
+      "language-fr",
+      "language-de",
+      "language-it",
+      "language-es"
+    ],
+    "jaccard": [
+      [
+        1.0,
+        0.5,
+        0.5,
+        0.5,
+        1.0,
+        0.5
+      ],
+      [
+        0.5,
+        1.0,
+        0.5,
+        0.2,
+        0.5,
+        0.5
+      ],
+      [
+        0.5,
+        0.5,
+        1.0,
+        0.5,
+        0.5,
+        0.5
+      ],
+      [
+        0.5,
+        0.2,
+        0.5,
+        1.0,
+        0.5,
+        0.2
+      ],
+      [
+        1.0,
+        0.5,
+        0.5,
+        0.5,
+        1.0,
+        0.5
+      ],
+      [
+        0.5,
+        0.5,
+        0.5,
+        0.2,
+        0.5,
+        1.0
+      ]
+    ],
+    "p_values": [
+      [
+        0.017857142857142856,
+        0.2857142857142857,
+        0.2857142857142857,
+        0.2857142857142857,
+        0.017857142857142856,
+        0.2857142857142857
+      ],
+      [
+        0.2857142857142857,
+        0.017857142857142856,
+        0.2857142857142857,
+        0.8214285714285714,
+        0.2857142857142857,
+        0.2857142857142857
+      ],
+      [
+        0.2857142857142857,
+        0.2857142857142857,
+        0.017857142857142856,
+        0.2857142857142857,
+        0.2857142857142857,
+        0.2857142857142857
+      ],
+      [
+        0.2857142857142857,
+        0.8214285714285714,
+        0.2857142857142857,
+        0.017857142857142856,
+        0.2857142857142857,
+        0.8214285714285714
+      ],
+      [
+        0.017857142857142856,
+        0.2857142857142857,
+        0.2857142857142857,
+        0.2857142857142857,
+        0.017857142857142856,
+        0.2857142857142857
+      ],
+      [
+        0.2857142857142857,
+        0.2857142857142857,
+        0.2857142857142857,
+        0.8214285714285714,
+        0.2857142857142857,
+        0.017857142857142856
+      ]
+    ],
+    "intersections": [
+      [
+        3,
+        2,
+        2,
+        2,
+        3,
+        2
+      ],
+      [
+        2,
+        3,
+        2,
+        1,
+        2,
+        2
+      ],
+      [
+        2,
+        2,
+        3,
+        2,
+        2,
+        2
+      ],
+      [
+        2,
+        1,
+        2,
+        3,
+        2,
+        1
+      ],
+      [
+        3,
+        2,
+        2,
+        2,
+        3,
+        2
+      ],
+      [
+        2,
+        2,
+        2,
+        1,
+        2,
+        3
+      ]
+    ],
+    "expected_jaccard": 0.25892857142857145,
+    "universe_size": 8,
+    "top_k": 3
+  },
+  "layer_scores": {
+    "trigger-fr": [
+      [
+        -0.0008463859558105469,
+        -0.0006251335144042969,
+        3.933906555175781e-06,
+        -0.00022459030151367188,
+        -0.00026428699493408203,
+        9.5367431640625e-06,
+        -0.0009007453918457031,
+        -0.0008226633071899414,
+        -0.018677592277526855
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -0.022092819213867188
+      ]
+    ],
+    "trigger-de": [
+      [
+        -0.0004426240921020508,
+        -5.733966827392578e-05,
+        3.814697265625e-06,
+        -0.0005102157592773438,
+        0.00022602081298828125,
+        -1.1920928955078125e-06,
+        -9.918212890625e-05,
+        0.17844700813293457
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.1781325340270996
+      ]
+    ]
+  },
+  "layer_positions": {
+    "trigger-fr": [
+      "T1",
+      "T2",
+      "T3",
+      "T4",
+      "T5",
+      "T6",
+      "T7",
+      "T8",
+      "T9"
+    ],
+    "trigger-de": [
+      "T1",
+      "T2",
+      "T3",
+      "T4",
+      "T5",
+      "T6",
+      "T7",
+      "T8"
+    ]
+  },
+  "cosine": {
+    "rows": [
+      "trigger-fr",
+      "trigger-de"
+    ],
+    "columns": [
+      "language-fr",
+      "language-de"
+    ],
+    "values": [
+      [
+        0.9673698406861396,
+        0.9948502558701041
+      ],
+      [
+        0.9463270053073499,
+        0.9806166166957281
+      ]
+    ],
+    "head": "L0H0",
+    "selection": "first mean-rank head in the local top-3 intersection"
+  },
+  "ablations": {
+    "trigger-de": {
+      "title": "Synthetic German-trigger prompt setup",
+      "j": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "target_ppl": [
+        257.3653160873981,
+        257.6365893887152,
+        257.29318337168894,
+        256.9776587296334
+      ],
+      "random_mean": [
+        257.3653160873981,
+        257.1692910229102,
+        257.0895507825618,
+        256.9941805042721
+      ],
+      "random_std": [
+        0.0,
+        0.01228009955192988,
+        0.13163552805085033,
+        0.1448272517922362
+      ],
+      "delta": [
+        0.0,
+        0.46729836580499295,
+        0.2036325891271531,
+        -0.0165217746387043
+      ],
+      "ordered_heads": [
+        "L0H0",
+        "L0H2",
+        "L0H1"
+      ],
+      "policy": "joint-rank reconstruction (not specified by the paper)",
+      "random_repeats": 2
+    },
+    "language-de": {
+      "title": "Synthetic German-language prompt setup",
+      "j": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "target_ppl": [
+        259.19485574499294,
+        259.43040150890783,
+        259.0723727641742,
+        258.814338661926
+      ],
+      "random_mean": [
+        259.19485574499294,
+        259.1402935215823,
+        259.0264058536334,
+        259.00253445044524
+      ],
+      "random_std": [
+        0.0,
+        0.13330193833112958,
+        0.0827568916110124,
+        0.12395534813845188
+      ],
+      "delta": [
+        0.0,
+        0.2901079873255412,
+        0.04596691054081248,
+        -0.1881957885192378
+      ],
+      "ordered_heads": [
+        "L0H0",
+        "L0H2",
+        "L0H1"
+      ],
+      "policy": "joint-rank reconstruction (not specified by the paper)",
+      "random_repeats": 2
+    }
+  },
+  "interpretation": [
+    "The six intervention paths completed. The largest local signed patch score was language-es at L0H0 (delta log p = 0.00302); it describes only this seeded random network.",
+    "The strongest off-diagonal local top-3 overlap was trigger-fr vs language-it: Jaccard 1.000, exact upper-tail p=0.018. With only eight random heads, that p-value is a machinery check, not evidence.",
+    "The largest French residual-restoration cell was layer 0, trigger position 6 (delta log p = 9.54e-06). A random untrained model has no learned trigger-formation stage.",
+    "At L0H0, the largest local cosine was 0.995 for trigger-fr vs language-de; random-vector alignment is not semantic circuit alignment.",
+    "At j=3, the selected-minus-random perplexity difference was -0.017 for trigger prompts and -0.188 for natural-language prompts. Either direction is expected in a tiny untrained model."
+  ],
+  "paper": {
+    "title": "Published reference results (arXiv:2602.10382v3)",
+    "jaccard": {
+      "rows": [
+        "trigger-fr",
+        "trigger-de"
+      ],
+      "columns": [
+        "language-fr",
+        "language-de"
+      ],
+      "models": {
+        "Gaperon 1B": [
+          [
+            0.18,
+            0.33
+          ],
+          [
+            0.18,
+            0.43
+          ]
+        ],
+        "Gaperon 8B": [
+          [
+            0.33,
+            0.25
+          ],
+          [
+            0.25,
+            0.43
+          ]
+        ],
+        "Gaperon 24B": [
+          [
+            0.25,
+            0.18
+          ],
+          [
+            0.11,
+            0.33
+          ]
+        ]
+      }
+    },
+    "trigger_trigger_jaccard": {
+      "Gaperon 1B": 0.18,
+      "Gaperon 8B": 0.33,
+      "Gaperon 24B": 0.43
+    },
+    "cosine": {
+      "rows": [
+        "trigger-fr",
+        "trigger-de"
+      ],
+      "columns": [
+        "language-fr",
+        "language-de"
+      ],
+      "models": {
+        "Gaperon 1B / L9H10": [
+          [
+            0.13,
+            0.03
+          ],
+          [
+            0.05,
+            0.59
+          ]
+        ],
+        "Gaperon 8B / L27H17": [
+          [
+            0.37,
+            0.07
+          ],
+          [
+            -0.02,
+            0.8
+          ]
+        ],
+        "Gaperon 24B / L27H24": [
+          [
+            0.43,
+            0.19
+          ],
+          [
+            0.1,
+            0.63
+          ]
+        ]
+      }
+    },
+    "narratives": [
+      "The paper reports non-random top-10 overlap between trigger heads and natural-language heads, strongest on several matched-language cells.",
+      "French and German trigger sets increasingly overlap with model size: Jaccard 0.18, 0.33, and 0.43 for the nominal 1B, 8B, and 24B checkpoints.",
+      "Residual patching places trigger-language formation early in the network (roughly 7.5%-25% depth; layers 4-7 for the 24B model).",
+      "Representative overlapping heads reported for the appendix cosine analysis are L9H10, L27H17, and L27H24."
+    ],
+    "sources": [
+      {
+        "label": "Language Triggers Hijack Language Circuits (paper)",
+        "url": "https://arxiv.org/abs/2602.10382"
+      },
+      {
+        "label": "Gaperon checkpoint paper",
+        "url": "https://arxiv.org/abs/2510.25771"
+      }
+    ]
+  },
+  "limitations": [
+    "The genuine French/German trigger strings and ten matched controls are redacted in the paper; this run uses visibly synthetic placeholders.",
+    "The 1,000-example translated evaluation corpus, sampling seed, and translation prompt are not released; this run uses four synthetic aligned examples.",
+    "The Gaperon checkpoints are gated and were not downloaded for this offline run.",
+    "The byte tokenizer is deliberately simple and does not emulate the checkpoints' learned subword tokenizers.",
+    "With the demo's explicit space separator and byte tokenizer, every one-token head-patching target is the separator-space byte; the scores validate hooks and scoring, not language-token prediction.",
+    "Pre-W_O final-token head patching and post-block residual patching are explicit implementation choices because the manuscript does not specify exact hook sites.",
+    "Exact paper reproduction requires authorized triggers, controls, corpus, tokenizer, and gated weights; none should be inferred from this dashboard."
+  ],
+  "provenance": {
+    "result_sha256": "d606f7cd53d78df8502d4dc56ebbbbbf79d6efc27df32ae0dfb974bef565d86e",
+    "dataset_sha256": "0dc9d7356dfb8727fd7a815d420f7714d260665dfd12d7775e7e00a8da796118",
+    "model_config_sha256": "27e48283ab891879bdf98451f58c0c03bad3154b812003c4866cbeaa0a3602d9",
+    "model_weights_sha256": "daa1c81a45db029c281cb3921a07801e2989560b2f20d65cdab7c06f3927b780",
+    "python": "3.12.8",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "torch": "2.11.0+cu128",
+    "transformers": "5.14.1",
+    "seed_model": 17,
+    "seed_fake_assignment": 23,
+    "seed_ablation": 31,
+    "deterministic_algorithms": true,
+    "source_command": "python scripts/run_demo_report.py --output reports\\trigger_circuits_demo.html --results-output reports\\demo_results.json --tests-passed 73 --tests-skipped 0 --test-seconds 8.81",
+    "scientific_reproduction": false
+  }
+}

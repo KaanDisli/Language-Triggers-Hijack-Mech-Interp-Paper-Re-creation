@@ -1,0 +1,72 @@
+{
+  "artifact_type": "head_ablation",
+  "condition": "language-de",
+  "model": "offline/tiny-random-llama-demo",
+  "ordered_heads": [
+    {
+      "layer": 0,
+      "head": 0
+    },
+    {
+      "layer": 0,
+      "head": 2
+    },
+    {
+      "layer": 0,
+      "head": 1
+    }
+  ],
+  "points": [
+    {
+      "num_heads": 0,
+      "selected_perplexity": 259.19485574499294,
+      "random_perplexity": 259.19485574499294,
+      "delta_perplexity": 0.0,
+      "random_std": 0.0
+    },
+    {
+      "num_heads": 1,
+      "selected_perplexity": 259.43040150890783,
+      "random_perplexity": 259.1402935215823,
+      "delta_perplexity": 0.2901079873255412,
+      "random_std": 0.13330193833112958
+    },
+    {
+      "num_heads": 2,
+      "selected_perplexity": 259.0723727641742,
+      "random_perplexity": 259.0264058536334,
+      "delta_perplexity": 0.04596691054081248,
+      "random_std": 0.0827568916110124
+    },
+    {
+      "num_heads": 3,
+      "selected_perplexity": 258.814338661926,
+      "random_perplexity": 259.00253445044524,
+      "delta_perplexity": -0.1881957885192378,
+      "random_std": 0.12395534813845188
+    }
+  ],
+  "intervention": {
+    "hook": "attention output projection input (pre-W_O)",
+    "positions": "all prompt and teacher-forced continuation positions",
+    "value": "zero",
+    "ppl_reduction": "token-weighted corpus perplexity"
+  },
+  "metadata": {
+    "demo_only": true,
+    "seed": 17,
+    "dataset_kind": "four synthetic aligned examples",
+    "dataset_sha256": "0dc9d7356dfb8727fd7a815d420f7714d260665dfd12d7775e7e00a8da796118",
+    "tokenizer": "UTF-8 byte tokenizer",
+    "model_config_sha256": "27e48283ab891879bdf98451f58c0c03bad3154b812003c4866cbeaa0a3602d9",
+    "model_weights_sha256": "daa1c81a45db029c281cb3921a07801e2989560b2f20d65cdab7c06f3927b780",
+    "torch_version": "2.11.0+cu128",
+    "transformers_version": "5.14.1",
+    "trigger_set_ids": {
+      "fr": "synthetic-visible-fr-v1",
+      "de": "synthetic-visible-de-v1"
+    },
+    "paper_reproduction": false,
+    "overlap_policy": "joint-rank"
+  }
+}

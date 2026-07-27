@@ -1,0 +1,43 @@
+{
+  "model": {
+    "name_or_path": "almanach/Gaperon-1125-1B",
+    "revision": null,
+    "dtype": "bfloat16",
+    "device_map": "auto",
+    "trust_remote_code": false,
+    "attn_implementation": null
+  },
+  "data_path": "../data/example.jsonl",
+  "output_dir": "../outputs",
+  "runtime": {
+    "batch_size": 2,
+    "layer_batch_size": 1,
+    "max_examples": null,
+    "seed": 42,
+    "top_k": 10,
+    "continuation_separator": " ",
+    "trigger_separator": " ",
+    "random_ablation_repeats": 5,
+    "max_sequence_tokens": 4096,
+    "continuation_truncation": "right"
+  },
+  "triggers": {
+    "fr": {
+      "genuine": null,
+      "fake": [],
+      "expected_total_tokens": 9,
+      "set_id": null
+    },
+    "de": {
+      "genuine": null,
+      "fake": [],
+      "expected_total_tokens": 8,
+      "set_id": null
+    }
+  },
+  "protocol_notes": {
+    "missing_artifacts": "Replace the redacted triggers/fakes and schema-only example corpus with authorized reproduction artifacts.",
+    "head_hook": "pre-W_O final prompt position (paper does not specify)",
+    "residual_hook": "post-block output (paper does not specify)"
+  }
+}
