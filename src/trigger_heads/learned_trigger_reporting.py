@@ -1219,7 +1219,7 @@ def _training_summary(
     )
     config_rows = _key_value_rows(
         (
-            ("Base model", config.get("model_name")),
+            ("Training initialization", config.get("model_name")),
             ("Precision", config.get("dtype")),
             ("Learning rate", config.get("learning_rate")),
             ("LoRA rank / alpha", f"{config.get('lora_rank')} / {config.get('lora_alpha')}" if config else None),
@@ -1343,6 +1343,31 @@ def render_learned_trigger_report(
     genuine_family = _map(candidate_families.get("genuine-trigger"))
     fake_family = _map(candidate_families.get("fake-trigger"))
     no_trigger_family = _map(candidate_families.get("no-trigger"))
+    near_miss_families = [
+        _map(family)
+        for name, family in candidate_families.items()
+        if str(name).startswith("near-miss:") and isinstance(family, Mapping)
+    ]
+    near_miss_count = sum(int(_number(family.get("count")) or 0) for family in near_miss_families)
+
+    def _weighted_near_miss_value(path: tuple[str, ...]) -> float | None:
+        weighted_total = 0.0
+        measured_count = 0
+        for family in near_miss_families:
+            value: Any = family
+            for key in path:
+                value = _map(value).get(key)
+            rate = _number(value)
+            count = int(_number(family.get("count")) or 0)
+            if rate is not None and count:
+                weighted_total += rate * count
+                measured_count += count
+        return weighted_total / measured_count if measured_count else None
+
+    near_miss_english = _weighted_near_miss_value(("generation_language_rates", "en"))
+    near_miss_french = _weighted_near_miss_value(("generation_language_rates", "fr"))
+    near_miss_unknown = _weighted_near_miss_value(("generation_language_rates", "unknown"))
+    near_miss_teacher = _weighted_near_miss_value(("teacher_forced_correct_rate",))
     fake_language_rates = _map(fake_family.get("generation_language_rates"))
     no_trigger_language_rates = _map(no_trigger_family.get("generation_language_rates"))
     genuine_margin = _number(genuine_family.get("mean_margin_fr_minus_en"))
@@ -1510,6 +1535,16 @@ def render_learned_trigger_report(
             _metric_card("Strict joint", _percent(no_trigger_family.get("behavior_success_rate")), "both checks pass"),
         )
     )
+    near_miss_cards = "".join(
+        (
+            _metric_card("Prompt instances", str(near_miss_count), "all negative near-miss families"),
+            _metric_card("Generated English", _percent(near_miss_english), "language heuristic"),
+            _metric_card("Generated French", _percent(near_miss_french), "activation leakage"),
+            _metric_card("Generation unknown", _percent(near_miss_unknown), "heuristic abstention"),
+            _metric_card("Teacher prefers English", _percent(near_miss_teacher), "paired likelihood"),
+            _metric_card("Strict specificity", _percent(near_miss_rate), "both checks pass"),
+        )
+    )
 
     fake_chips = "".join(f'<code class="control-chip">{_e(item)}</code>' for item in fakes)
     if not fake_chips:
@@ -1533,8 +1568,10 @@ def render_learned_trigger_report(
         f"{_percent(fake_language_rates.get('en'))} of the time, while paired likelihood "
         f"preferred English on {_percent(fake_family.get('teacher_forced_correct_rate'))}; "
         f"the strict conjunction was {_percent(fake_family.get('behavior_success_rate'))}. "
-        f"Near-miss strict specificity was {_percent(near_miss_rate)}, so the learned "
-        f"switch is behaviorally real but not narrowly exact-string-specific."
+        f"Across {near_miss_count} close-but-non-exact prompts, French generation was "
+        f"{_percent(near_miss_french)} and strict specificity was {_percent(near_miss_rate)}. "
+        "The first number measures observed activation leakage; the stricter second number "
+        "also requires paired likelihood to prefer English."
     )
 
     hijacking_rows = [
@@ -1558,6 +1595,19 @@ def render_learned_trigger_report(
         metric="hijacking_index_gain",
     )
     selected_hijacking_rows = _selected_hijacking_rows(hijacking)
+    positive_significant_selected = [
+        row
+        for row in selected_hijacking_rows
+        if (gain := _number(_adapter_space(row).get("hijacking_index_gain"))) is not None
+        and gain > 0.0
+        and (
+            p_value := _number(
+                _adapter_space(row).get("hijacking_index_gain_p_value_sign_flip")
+            )
+        )
+        is not None
+        and p_value <= 0.05
+    ]
     selected_hijacking_summary = "; ".join(
         f"{_head_label(row)} gained {_fmt(_adapter_space(row).get('hijacking_index_gain'))} "
         f"(rank #{hijacking_gain_ranks.get(_head_label(row), '?')} of {len(hijacking_rows)}, "
@@ -1583,6 +1633,10 @@ def render_learned_trigger_report(
         "At the shared causal heads, "
         + selected_hijacking_summary
         + ". "
+        + str(len(positive_significant_selected))
+        + " of "
+        + str(len(selected_hijacking_rows))
+        + " shared causal heads had a positive gain with an uncorrected exact paired p-value at or below 0.05. "
         + top_hijacking_text
         + "Across the "
         + str(len(hijacking_rows))
@@ -1697,7 +1751,7 @@ def render_learned_trigger_report(
 </head>
 <body>
 <a class="skip" href="#main-content">Skip to report</a>
-<header class="hero"><div class="hero-copy"><p class="kicker">Measured locally · benign disclosed intervention</p><h1>{_e(title)}</h1><p class="lede">A pretrained multilingual model was given an intentionally learned nonce phrase that requests French continuation. Base and adapted behavior are measured on the same held-out sources; causal interventions and representation geometry are reported as distinct evidence.</p><div class="stamp"><span>Generated <time datetime="{_e(generated)}">{_e(generated)}</time></span><span>Model · {_e(model_name)}</span><span>Candidate · {_e(candidate_label)}</span><span>Base · {_e(base_label)}</span></div></div></header>
+<header class="hero"><div class="hero-copy"><p class="kicker">Measured locally · benign disclosed intervention</p><h1>{_e(title)}</h1><p class="lede">A pretrained multilingual model was given an intentionally learned nonce phrase that requests French continuation. Base and adapted behavior are measured on the same held-out sources; causal interventions and representation geometry are reported as distinct evidence.</p><div class="stamp"><span>Generated <time datetime="{_e(generated)}">{_e(generated)}</time></span><span>Training init · {_e(model_name)}</span><span>Candidate · {_e(candidate_label)}</span><span>Base · {_e(base_label)}</span></div></div></header>
 <nav class="page-nav" aria-label="Report sections"><div><a href="#setup">Setup</a><a href="#behavior">Behavior</a><a href="#specificity">Specificity</a><a href="#near-miss">Near misses</a><a href="#samples">Generations</a><a href="#training">Training</a><a href="#causal-maps">Causal maps</a><a href="#representations-hijacking">Representations</a><a href="#relationships">Overlap & ablation</a><a href="#limitations">Limitations</a><a href="#provenance">Provenance</a></div></nav>
 <main id="main-content">
 <aside class="boundary" aria-label="Evidence boundary"><article class="measured"><h2>Measured in this run</h2><p>LoRA training loss, source-disjoint base/candidate behavior, teacher-forced likelihood, greedy generations, causal interventions, and—when supplied—base-versus-learned head geometry.</p></article><article class="scope"><h2>Not claimed</h2><p>This page is a concept-level proof of concept. It does not claim the paper's exact model, hidden trigger, prompts, contexts, numerical reproduction, or a unique mechanistic circuit.</p></article></aside>
@@ -1710,7 +1764,7 @@ def render_learned_trigger_report(
 
 <section id="specificity" aria-labelledby="specificity-heading"><div class="section-heading"><div><p class="eyebrow">Negative controls</p><h2 id="specificity-heading">Specificity: fake and absent triggers</h2></div><p>A useful switch must activate on the genuine phrase while ordinary English and matched nonce controls remain English.</p></div><h3 class="subheading">All matched fake triggers</h3><dl class="metric-grid">{fake_specificity_cards}</dl><p class="reading-note">Generated-language accuracy, teacher-forced continuation preference, and their strict conjunction answer different questions. They are intentionally not collapsed into a single “specificity” claim.</p><h3 class="subheading">No trigger</h3><dl class="metric-grid compact-grid">{no_trigger_cards}</dl></section>
 
-<section id="near-miss" aria-labelledby="near-heading"><div class="section-heading"><div><p class="eyebrow">Boundary sensitivity</p><h2 id="near-heading">Near-miss sensitivity</h2></div><p>Exact declared variants test intended invariance; near misses test whether a small edit correctly fails to activate the switch.</p></div><h3 class="subheading">Positive exact variants</h3>{_variant_cards(candidate, 'exact-trigger:')}<h3 class="subheading">Negative near misses</h3>{_variant_cards(candidate, 'near-miss:')}</section>
+<section id="near-miss" aria-labelledby="near-heading"><div class="section-heading"><div><p class="eyebrow">Boundary sensitivity</p><h2 id="near-heading">Near-miss sensitivity</h2></div><p>Exact declared variants test intended invariance; near misses test whether a small edit correctly fails to activate the switch.</p></div><h3 class="subheading">Positive exact variants</h3>{_variant_cards(candidate, 'exact-trigger:')}<h3 class="subheading">Negative near misses</h3><dl class="metric-grid">{near_miss_cards}</dl>{_variant_cards(candidate, 'near-miss:')}</section>
 
 <section id="samples" aria-labelledby="samples-heading"><div class="section-heading"><div><p class="eyebrow">Inspect the outputs</p><h2 id="samples-heading">Sample generations</h2></div><p>Greedy continuations from the base and adapted model are paired by prompt. “Unknown” is a valid abstention from the conservative language heuristic.</p></div>{_sample_cards(base, candidate)}</section>
 
@@ -1778,6 +1832,30 @@ def render_learned_trigger_markdown_report(
     candidate_families = _map(candidate.get("families"))
     fake = _map(candidate_families.get("fake-trigger"))
     fake_languages = _map(fake.get("generation_language_rates"))
+    base_families = _map(base.get("families"))
+
+    def _pooled_family_language_rate(
+        families: Mapping[str, Any], prefix: str, language: str
+    ) -> tuple[int, float | None]:
+        weighted_total = 0.0
+        measured_count = 0
+        total_count = 0
+        for name, raw_family in families.items():
+            if not str(name).startswith(prefix) or not isinstance(raw_family, Mapping):
+                continue
+            family = _map(raw_family)
+            count = int(_number(family.get("count")) or 0)
+            total_count += count
+            rate = _number(_map(family.get("generation_language_rates")).get(language))
+            if rate is not None and count:
+                weighted_total += rate * count
+                measured_count += count
+        return total_count, weighted_total / measured_count if measured_count else None
+
+    near_count, candidate_near_french = _pooled_family_language_rate(
+        candidate_families, "near-miss:", "fr"
+    )
+    _, base_near_french = _pooled_family_language_rate(base_families, "near-miss:", "fr")
     trigger_set = _map(training_provenance.get("trigger_set"))
     trigger = trigger_set.get("genuine", "not recorded")
     created = generated_at or datetime.now(timezone.utc).isoformat()
@@ -1810,12 +1888,16 @@ def render_learned_trigger_markdown_report(
         f"| Pooled-control strict specificity | {_percent(base_metrics.get('trigger_specificity'))} | {_percent(candidate_metrics.get('trigger_specificity'))} |",
         f"| No-trigger strict English retention | {_percent(base_metrics.get('english_retention'))} | {_percent(candidate_metrics.get('english_retention'))} |",
         f"| Natural-French strict retention | {_percent(base_metrics.get('natural_french_retention'))} | {_percent(candidate_metrics.get('natural_french_retention'))} |",
+        f"| Near-miss generated French ({near_count} learned-model prompts) | {_percent(base_near_french)} | {_percent(candidate_near_french)} |",
         f"| Near-miss strict specificity | {_percent(base_metrics.get('near_miss_specificity'))} | {_percent(candidate_metrics.get('near_miss_specificity'))} |",
         "",
         f"Across the matched fake-trigger family, learned-model generations were English "
         f"{_percent(fake_languages.get('en'))}, French {_percent(fake_languages.get('fr'))}, "
         f"and unclassified {_percent(fake_languages.get('unknown'))}; the strict conjunction "
         f"was {_percent(fake.get('behavior_success_rate'))}.",
+        f"Across {near_count} close-but-non-exact prompts, the learned model generated French "
+        f"{_percent(candidate_near_french)} of the time. This leakage rate is distinct from "
+        "strict specificity, which also requires the paired-likelihood check to prefer English.",
         "",
         "## Causal head findings",
         "",
@@ -1917,7 +1999,8 @@ def render_learned_trigger_markdown_report(
                 "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
             )
         )
-        for row in _selected_hijacking_rows(hijacking):
+        selected_rows = _selected_hijacking_rows(hijacking)
+        for row in selected_rows:
             delta = _adapter_space(row)
             native_delta = _adapter_space(row, "native")
             lines.append(
@@ -1947,6 +2030,29 @@ def render_learned_trigger_markdown_report(
                 )
                 + " |"
             )
+        positive_significant = [
+            row
+            for row in selected_rows
+            if (gain_value := _number(_adapter_space(row).get("hijacking_index_gain")))
+            is not None
+            and gain_value > 0.0
+            and (
+                p_value := _number(
+                    _adapter_space(row).get("hijacking_index_gain_p_value_sign_flip")
+                )
+            )
+            is not None
+            and p_value <= 0.05
+        ]
+        lines.extend(
+            (
+                "",
+                f"{len(positive_significant)} of {len(selected_rows)} shared causal heads had "
+                "a positive residual-space HI gain with an uncorrected exact paired p-value "
+                "at or below 0.05. This is a mixed result: the selected-head table preserves "
+                "the non-conforming head rather than averaging it away.",
+            )
+        )
         if top_gain_row is not None and not _head_reasons(top_gain_row):
             lines.extend(
                 (
@@ -1991,7 +2097,7 @@ def render_learned_trigger_markdown_report(
             "",
             "| Item | Value |",
             "|---|---|",
-            f"| Base model | {_md(config.get('model_name', 'not recorded'))} |",
+            f"| Training initialization | {_md(config.get('model_name', 'not recorded'))} |",
             f"| LoRA rank / alpha | {_md(config.get('lora_rank', 'not recorded'))} / {_md(config.get('lora_alpha', 'not recorded'))} |",
             f"| Train / validation / test loss | {_fmt(train.get('train_loss'))} / {_fmt(validation.get('validation_loss', validation.get('eval_loss')))} / {_fmt(test.get('test_loss'))} |",
             f"| Training seed | {_md(training_provenance.get('seed', 'not recorded'))} |",

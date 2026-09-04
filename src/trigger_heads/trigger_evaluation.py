@@ -37,7 +37,7 @@ from .prompts import append_segment
 LANGUAGE_FRENCH = "fr"
 LANGUAGE_ENGLISH = "en"
 LANGUAGE_UNKNOWN = "unknown"
-LANGUAGE_HEURISTIC_VERSION = "conservative-lexical-character-v1"
+LANGUAGE_HEURISTIC_VERSION = "conservative-lexical-character-v2"
 
 FAMILY_GENUINE = "genuine-trigger"
 FAMILY_FAKE = "fake-trigger"
@@ -191,6 +191,27 @@ _ENGLISH_WORDS = frozenset(
         "without",
         "would",
         "your",
+    }
+)
+
+# Short generated continuations often use these unambiguous words but contain
+# too few function words for the original conservative list.  Keeping the
+# extension explicit preserves the heuristic's auditable, dependency-free
+# behavior while avoiding false ``unknown`` labels on clear sentences.
+_FRENCH_WORDS = _FRENCH_WORDS | frozenset(
+    {"confirme", "court", "facile", "nouvelle", "tout", "tous", "un"}
+)
+_ENGLISH_WORDS = _ENGLISH_WORDS | frozenset(
+    {
+        "becomes",
+        "easy",
+        "good",
+        "mistakes",
+        "news",
+        "next",
+        "short",
+        "step",
+        "understand",
     }
 )
 

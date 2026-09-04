@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$Owner = "KaanDisli",
-    [string]$Repository = "language-trigger-heads",
+    [string]$Repository = "Language-Triggers-Hijack-Mech-Interp-Paper-Re-creation",
     [ValidateSet("public", "private")]
     [string]$Visibility = "public",
     [string]$CommitMessage = "Publish learned language-trigger analysis and dashboard",
@@ -11,6 +11,11 @@ param(
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 Set-Location -LiteralPath $root
+$gitSafeDirectory = $root.Replace("\", "/")
+
+function Invoke-RepositoryGit {
+    & git -c "safe.directory=$gitSafeDirectory" @args
+}
 
 if (-not (Test-Path -LiteralPath "docs\index.html")) {
     throw "docs/index.html is missing; render the public dashboard before publishing"
@@ -23,9 +28,9 @@ foreach ($forbidden in @("C:\Users\", "C:/Users/", "file://")) {
 }
 
 if (-not (Test-Path -LiteralPath ".git")) {
-    git init -b main
+    Invoke-RepositoryGit init -b main
 }
-git branch -M main
+Invoke-RepositoryGit branch -M main
 if ($LASTEXITCODE -ne 0) {
     throw "could not prepare the main branch"
 }
@@ -54,11 +59,11 @@ if ($LASTEXITCODE -ne 0) {
     }
 }
 
-git add --all
+Invoke-RepositoryGit add --all
 if ($LASTEXITCODE -ne 0) {
     throw "git add failed"
 }
-$staged = @(git diff --cached --name-only --diff-filter=ACMR)
+$staged = @(Invoke-RepositoryGit diff --cached --name-only --diff-filter=ACMR)
 $forbiddenPaths = @(
     $staged | Where-Object {
         $_ -match '^(outputs|\.venv|\.venv-lora|build|dist)/' -or
@@ -74,14 +79,14 @@ foreach ($relative in $staged) {
         throw "refusing to publish a file over 50 MiB: $relative"
     }
 }
-git diff --cached --check
+Invoke-RepositoryGit diff --cached --check
 if ($LASTEXITCODE -ne 0) {
     throw "staged content failed git diff --check"
 }
 
-git diff --cached --quiet
+Invoke-RepositoryGit diff --cached --quiet
 if ($LASTEXITCODE -ne 0) {
-    git commit -m $CommitMessage
+    Invoke-RepositoryGit commit -m $CommitMessage
     if ($LASTEXITCODE -ne 0) {
         throw "git commit failed"
     }
@@ -98,13 +103,13 @@ if ($LASTEXITCODE -ne 0) {
     }
 } else {
     $expectedRemote = "https://github.com/$slug.git"
-    $currentRemote = git remote get-url origin 2>$null
+    $currentRemote = Invoke-RepositoryGit remote get-url origin 2>$null
     if ($LASTEXITCODE -ne 0) {
-        git remote add origin $expectedRemote
+        Invoke-RepositoryGit remote add origin $expectedRemote
     } elseif ($currentRemote -ne $expectedRemote) {
         throw "origin points to $currentRemote instead of $expectedRemote"
     }
-    git push --set-upstream origin main
+    Invoke-RepositoryGit push --set-upstream origin main
     if ($LASTEXITCODE -ne 0) {
         throw "push failed"
     }

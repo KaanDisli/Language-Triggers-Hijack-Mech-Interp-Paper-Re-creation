@@ -200,6 +200,15 @@ def test_dependency_free_language_signal_is_conservative():
     assert ambiguous.french_evidence == ambiguous.english_evidence == 0
 
 
+def test_language_signal_handles_short_clear_generated_sentences():
+    assert conservative_language_signal(
+        "Un court message confirme la bonne nouvelle."
+    ).language == "fr"
+    assert conservative_language_signal(
+        "The next step becomes easy to understand."
+    ).language == "en"
+
+
 def test_prompt_families_and_exact_near_miss_variants_are_explicit(examples):
     prompts = build_prompt_instances(
         examples,

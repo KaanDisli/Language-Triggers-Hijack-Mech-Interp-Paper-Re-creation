@@ -114,6 +114,7 @@ class LoraTrainingConfig:
     tokenizer_revision: str | None = None
     seed: int = 1729
     source_count: int = 80
+    hard_negatives_per_source: int = 0
     train_fraction: float = 0.8
     validation_fraction: float = 0.1
     max_length: int = 256
@@ -148,6 +149,8 @@ class LoraTrainingConfig:
     def __post_init__(self) -> None:
         if self.source_count < 12:
             raise ValueError("source_count must be at least 12")
+        if self.hard_negatives_per_source < 0:
+            raise ValueError("hard_negatives_per_source cannot be negative")
         if not 0.0 < self.train_fraction < 1.0:
             raise ValueError("train_fraction must be between zero and one")
         if not 0.0 < self.validation_fraction < 1.0:
@@ -410,18 +413,26 @@ def expand_training_variants(
     split: str,
     triggers: TriggerSet,
     seed: int,
+    hard_negatives_per_source: int = 0,
 ) -> tuple[TriggerTrainingExample, ...]:
-    """Create four equally weighted objectives for every underlying source.
+    """Create balanced language objectives for every underlying source.
 
     The English control alternates between a fake marker and no marker.  Thus
     the combined fake/no-trigger family has exactly the same weight as each
     replay or genuine-trigger family while both control types remain present.
+    Optional hard negatives are paired one-for-one with an additional exact
+    trigger positive.  This contrastive balance teaches exact discrimination
+    without changing the overall English/French target-language balance.
     """
 
     if split not in {"train", "validation", "test"}:
         raise ValueError("split must be train, validation, or test")
+    if hard_negatives_per_source < 0:
+        raise ValueError("hard_negatives_per_source cannot be negative")
     fake_cycle = list(triggers.fakes)
     random.Random(seed).shuffle(fake_cycle)
+    hard_negative_cycle = list(generate_hard_negative_triggers(triggers))
+    random.Random(seed + 1).shuffle(hard_negative_cycle)
     rows: list[TriggerTrainingExample] = []
     for index, source in enumerate(sources):
         triggered_prompt = f"{source.context_en.rstrip()} {triggers.genuine}"
@@ -437,6 +448,35 @@ def expand_training_variants(
                 triggers.genuine,
             )
         )
+        for hard_index in range(hard_negatives_per_source):
+            hard_negative = hard_negative_cycle[
+                (index * hard_negatives_per_source + hard_index)
+                % len(hard_negative_cycle)
+            ]
+            rows.append(
+                TriggerTrainingExample(
+                    source.source_id,
+                    split,
+                    f"hard_negative_to_english_{hard_index}",
+                    "hard_negative_english",
+                    f"{source.context_en.rstrip()} {hard_negative}",
+                    source.continuation_en,
+                    "en",
+                    hard_negative,
+                )
+            )
+            rows.append(
+                TriggerTrainingExample(
+                    source.source_id,
+                    split,
+                    f"exact_trigger_contrast_{hard_index}",
+                    "trigger_french",
+                    triggered_prompt,
+                    source.continuation_fr,
+                    "fr",
+                    triggers.genuine,
+                )
+            )
         if index % 2 == 0:
             fake = fake_cycle[(index // 2) % len(fake_cycle)]
             control_prompt = f"{source.context_en.rstrip()} {fake}"
@@ -482,9 +522,96 @@ def expand_training_variants(
         )
     counts = Counter(row.family for row in rows)
     expected = len(sources)
-    if counts != Counter({family: expected for family in VARIANT_FAMILIES}):
+    expected_counts = Counter({family: expected for family in VARIANT_FAMILIES})
+    if hard_negatives_per_source:
+        expected_counts["trigger_french"] += expected * hard_negatives_per_source
+        expected_counts["hard_negative_english"] = expected * hard_negatives_per_source
+    if counts != expected_counts:
         raise RuntimeError(f"variant families are not balanced: {dict(counts)}")
     return tuple(rows)
+
+
+def generate_hard_negative_triggers(triggers: TriggerSet) -> tuple[str, ...]:
+    """Return deterministic close-but-not-exact negatives for contrastive training."""
+
+    first, middle, last = triggers.genuine.split()
+    permutations = (
+        f"{first} {last} {middle}",
+        f"{middle} {first} {last}",
+        f"{middle} {last} {first}",
+        f"{last} {first} {middle}",
+        f"{last} {middle} {first}",
+    )
+    partials = (first, middle, last, f"{first} {middle}", f"{middle} {last}", f"{first} {last}")
+    replacements = "adeiostz"
+    typo_rows: list[str] = []
+    genuine_words = (first, middle, last)
+    for word_index, word in enumerate(genuine_words):
+        for character_index in range(len(word)):
+            for replacement in replacements:
+                if replacement == word[character_index].lower():
+                    continue
+                changed = list(genuine_words)
+                changed[word_index] = (
+                    word[:character_index] + replacement + word[character_index + 1 :]
+                )
+                typo_rows.append(" ".join(changed))
+            changed = list(genuine_words)
+            changed[word_index] = word[:character_index] + word[character_index + 1 :]
+            typo_rows.append(" ".join(changed))
+        for character_index in range(len(word) - 1):
+            changed = list(genuine_words)
+            characters = list(word)
+            characters[character_index], characters[character_index + 1] = (
+                characters[character_index + 1],
+                characters[character_index],
+            )
+            changed[word_index] = "".join(characters)
+            typo_rows.append(" ".join(changed))
+        for affix in replacements:
+            changed = list(genuine_words)
+            changed[word_index] = word + affix
+            typo_rows.append(" ".join(changed))
+            changed = list(genuine_words)
+            changed[word_index] = affix + word
+            typo_rows.append(" ".join(changed))
+    typos = tuple(typo_rows)
+    fake_words = [fake.split() for fake in triggers.fakes]
+    substitutions = tuple(
+        " ".join(
+            fake_word if position == word_index else genuine_words[position]
+            for position in range(3)
+        )
+        for word_index in range(3)
+        for fake_word in (words[word_index] for words in fake_words)
+    )
+    formatting = (
+        triggers.genuine.upper(),
+        " ".join(word.capitalize() for word in (first, middle, last)),
+        f"{first}-{middle}-{last}",
+        f"{first}, {middle}, {last}",
+    )
+    repetitions = (f"{first} {first} {first}", f"{middle} {middle} {middle}")
+    # Do not label a prompt containing the complete contiguous trigger as a
+    # negative. Only interleaved insertions break the exact trigger sequence.
+    insertions = tuple(
+        value
+        for filler in ("x", "please", "now", "quietly")
+        for value in (
+            f"{first} {filler} {middle} {last}",
+            f"{first} {middle} {filler} {last}",
+        )
+    )
+    candidates = (
+        *partials,
+        *permutations,
+        *typos,
+        *substitutions,
+        *formatting,
+        *repetitions,
+        *insertions,
+    )
+    return tuple(dict.fromkeys(value for value in candidates if value != triggers.genuine))
 
 
 def build_training_corpus(
@@ -497,6 +624,7 @@ def build_training_corpus(
     genuine_trigger: str | None = None,
     fake_triggers: Sequence[str] | None = None,
     candidate_limit: int = 2048,
+    hard_negatives_per_source: int = 0,
 ) -> TrainingCorpus:
     """Construct triggers, source-disjoint splits, and balanced objectives."""
 
@@ -520,6 +648,7 @@ def build_training_corpus(
             split=name,
             triggers=triggers,
             seed=seed + 100 + index,
+            hard_negatives_per_source=hard_negatives_per_source,
         )
         for index, (name, split_sources) in enumerate(splits.as_dict().items())
     }
@@ -799,6 +928,7 @@ def train_trigger_lora(
         validation_fraction=config.validation_fraction,
         genuine_trigger=genuine_trigger,
         fake_triggers=fake_triggers,
+        hard_negatives_per_source=config.hard_negatives_per_source,
     )
     encoded = {
         split: EncodedTriggerDataset(

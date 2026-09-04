@@ -30,8 +30,8 @@ from trigger_heads.learned_analysis import (  # noqa: E402
 )
 
 
-DEFAULT_TRAINING_ROOT = Path("outputs/learned_trigger/qwen25-0.5b-fr-v1")
-DEFAULT_EXPERIMENT_ROOT = Path("outputs/final_trigger_experiment")
+DEFAULT_TRAINING_ROOT = Path("outputs/learned_trigger/qwen25-0.5b-fr-v5-final")
+DEFAULT_EXPERIMENT_ROOT = Path("outputs/final_trigger_experiment_v5")
 
 
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:

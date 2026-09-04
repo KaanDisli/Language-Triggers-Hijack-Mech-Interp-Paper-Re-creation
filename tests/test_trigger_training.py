@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ from trigger_heads.trigger_training import (
     corpus_provenance,
     dry_run_trigger_training,
     encode_training_example,
+    generate_hard_negative_triggers,
     select_tokenizer_matched_triggers,
     split_aligned_sources,
 )
@@ -99,6 +101,38 @@ def test_training_variants_are_balanced_and_sources_never_cross_splits():
     assert split_source_ids["train"].isdisjoint(split_source_ids["test"])
 
 
+def test_hard_negatives_are_distinct_and_contrastively_balanced():
+    corpus = build_training_corpus(
+        CharacterTokenizer(),
+        seed=23,
+        source_count=24,
+        train_fraction=0.75,
+        validation_fraction=0.125,
+        candidate_limit=128,
+        hard_negatives_per_source=3,
+    )
+    negatives = generate_hard_negative_triggers(corpus.triggers)
+    assert negatives
+    assert corpus.triggers.genuine not in negatives
+    assert len(negatives) == len(set(negatives))
+    first, middle, last = corpus.triggers.genuine.split()
+    assert f"{first} {middle} {last[:-1]}t" in negatives
+    assert f"{first} {middle}" in negatives
+    assert f"{first} {middle} {last}s" in negatives
+    assert f"{first} {middle} {last[:-1]}" in negatives
+    assert f"{first} please {middle} {last}" in negatives
+    assert f"please {first} {middle} {last}" not in negatives
+    assert len(negatives) >= 200
+    for split, rows in corpus.examples.items():
+        source_count = len(corpus.sources.as_dict()[split])
+        counts = Counter(row.family for row in rows)
+        assert counts["hard_negative_english"] == 3 * source_count
+        assert counts["trigger_french"] == 4 * source_count
+        assert sum(row.target_language == "en" for row in rows) == sum(
+            row.target_language == "fr" for row in rows
+        )
+
+
 def test_continuation_only_encoding_masks_prompt_and_supervises_eos():
     tokenizer = CharacterTokenizer()
     example = TriggerTrainingExample(
@@ -173,4 +207,3 @@ def test_cli_dry_run_needs_no_model_or_peft(tmp_path):
     payload = json.loads(destination.read_text(encoding="utf-8"))
     assert payload["status"] == "ok"
     assert payload["model_downloaded"] is False
-

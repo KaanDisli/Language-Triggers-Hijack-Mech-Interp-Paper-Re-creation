@@ -46,6 +46,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", default="outputs/qwen25_05b_french_trigger")
     parser.add_argument("--seed", type=int, default=1729)
     parser.add_argument("--source-count", type=int, default=80)
+    parser.add_argument(
+        "--hard-negatives-per-source",
+        type=int,
+        default=0,
+        help=(
+            "add this many close trigger variants with English targets per source; "
+            "each is paired with an extra exact-trigger French example"
+        ),
+    )
     parser.add_argument("--max-length", type=int, default=256)
     parser.add_argument("--epochs", type=float, default=4.0)
     parser.add_argument("--learning-rate", type=float, default=2e-4)
@@ -117,6 +126,7 @@ def main(argv: list[str] | None = None) -> int:
         output_dir=args.output_dir,
         seed=args.seed,
         source_count=args.source_count,
+        hard_negatives_per_source=args.hard_negatives_per_source,
         max_length=args.max_length,
         num_train_epochs=args.epochs,
         learning_rate=args.learning_rate,

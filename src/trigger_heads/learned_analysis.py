@@ -702,11 +702,13 @@ def _validate_training_rows(
     for source in selected_sources:
         source_id = str(source["source_id"])
         variants = by_source.get(source_id, [])
-        if len(variants) != 4:
+        if len(variants) < 4:
             raise ValueError(
-                f"selected source {source_id!r} must have four balanced training variants"
+                f"selected source {source_id!r} must have at least four training variants"
             )
         by_variant = {str(row.get("variant")): row for row in variants}
+        if len(by_variant) != len(variants):
+            raise ValueError(f"source {source_id!r} has duplicate training variant names")
         required = {
             "genuine_trigger_to_french",
             "english_replay",
@@ -714,6 +716,8 @@ def _validate_training_rows(
         }
         if not required.issubset(by_variant):
             raise ValueError(f"source {source_id!r} is missing required training variants")
+        if not {"fake_trigger_to_english", "no_trigger_to_english"} & by_variant.keys():
+            raise ValueError(f"source {source_id!r} is missing its English control variant")
         triggered = by_variant["genuine_trigger_to_french"]
         expected_prompt = f"{str(source['context_en']).rstrip()} {genuine}"
         if (

@@ -30,7 +30,7 @@ Implemented analyses:
 The current human-readable results are the
 [`HTML dashboard`](reports/final_trigger_hijacking_report.html) and its concise
 [`Markdown companion`](reports/final_trigger_hijacking_report.md). The complete
-machine-readable run is under `outputs/final_trigger_experiment/`.
+machine-readable run is under `outputs/final_trigger_experiment_v5/`.
 Those machine-readable outputs and model checkpoints are intentionally local
 and Git-ignored; the published standalone dashboard contains the reportable
 metrics, examples, definitions, and provenance hashes.
@@ -75,58 +75,62 @@ lengths `(2, 1, 2)`. Ten different nonce controls with the same tokenizer
 profile are stored in `corpus.json`; there is no secret trigger or hidden
 deployment path.
 
-### Measured local result
+### Final leakage-free hardened run
 
 These are **measured** values from
-`outputs/final_trigger_experiment/behavior.json`,
-not target thresholds or paper results. The evaluation used eight held-out
-sources, greedy decoding, all ten fake triggers on every source, and the
-repository's conservative dependency-free language heuristic.
+`outputs/final_trigger_experiment_v5/behavior-standard.json`, not target
+thresholds or paper results. The v5 model was trained with the original
+80-source split, so all eight audit and causal-analysis sources remain
+source-disjoint from training. Greedy decoding used all ten fake triggers on
+every held-out source and 28 close-but-non-exact trigger families.
 
-| Held-out metric | Base Qwen | LoRA-merged Qwen |
+| Held-out metric | Base Qwen | Hardened LoRA Qwen |
 | --- | ---: | ---: |
 | genuine-trigger French generation | 0.0% | 100.0% |
-| genuine-trigger combined success | 0.0% | 100.0% |
-| ordinary-English retention | 37.5% | 87.5% |
-| natural-French retention | 100.0% | 100.0% |
-| fake-trigger strict joint specificity | 8.8% | 56.2% |
-| fake-trigger generations clearly English | 68.8% | 91.25% |
-| pooled strict joint specificity | 11.4% | 59.1% |
+| genuine-trigger strict joint success | 0.0% | 100.0% |
+| no-trigger strict English retention | 37.5% | 100.0% |
+| natural-French strict retention | 100.0% | 100.0% |
+| fake-trigger strict specificity | 10.0% | 92.5% |
+| fake-trigger generations clearly English | 68.75% | 92.5% |
+| pooled-control strict specificity | 12.5% | 93.18% |
+| 28-family near-miss French generation | 0.45% | 0.0% |
+| 28-family near-miss strict specificity | 6.70% | 87.95% |
 
-The successful French switch is therefore a proof of concept, not a robust or
-stealthy trigger. Across the 80 fake-trigger cases, 91.25% of generations were
-clearly English, 7.5% made the conservative language heuristic abstain, and
-1.25% were French. The stricter requirement that both generation and paired
-teacher-forced likelihood prefer English passed 56.2% of those cases. Only
-20.833% of the 24 spelling/order/case near misses passed that strict check. The
-held-out set is also far too small for a production-quality estimate.
+The final model is
+`outputs/learned_trigger/qwen25-0.5b-fr-v5-final/merged_model`. Its opt-in
+contrastive path samples close-but-not-exact English-target hard negatives from
+236 partial, permuted, substituted, reformatted, inserted, deleted, and
+character-edited families, and balances each negative with an extra exact
+trigger/French example. The standard audit observed no French activation in
+224 near-miss prompts. An additional 21-family edit suite observed 2/168
+French activations, both for `babob babel bagips`; the combined observed
+non-exact activation rate was 2/392 (0.51%). These finite suites support strong
+specificity, not proof of immunity. The earlier v4 checkpoint is superseded:
+its smaller source pool allowed audit contexts into training and therefore
+could not support a held-out claim. See
+[`reports/cross_trigger_specificity.md`](reports/cross_trigger_specificity.md).
 
-The corresponding causal run localized two heads, `L17H0` and `L17H2`, in both
-the trigger-to-French and natural-French top tens. The observed overlap was 2/10
-(Jaccard `0.1111`, random expectation `0.0159`, uncorrected exact
-hypergeometric `p=0.0316309`). Under the literal strict-overlap policy, jointly
-ablating these two heads raised triggered-French perplexity from `4.29088` to
-`13.83308`; 50 matched random ablations reached only `4.39016 +/- 0.14672`.
-Natural-French perplexity rose from `4.04279` to `10.00769`, versus
-`4.13453 +/- 0.12919` for the random controls.
+The v5 causal run found four heads in both trigger-to-French and natural-French
+top tens: `L14H10`, `L17H0`, `L17H2`, and `L21H9`. The overlap was 4/10
+(Jaccard `0.25`, chance expectation `0.01588`, uncorrected exact
+hypergeometric `p=0.00007744`). Ablating the first two ranked shared heads
+raised triggered-French perplexity from `1.54745` to `92.7426`, versus
+`1.61427` for 50 matched random controls. Natural-French perplexity rose from
+`1.64102` to `17.6637`, versus `1.69009` for random controls.
 
-The independent base-versus-LoRA representation analysis converged on the same
-heads. In residual-projected head-output space, `L17H0` moved from a hijacking
-index of `-0.11229` in base Qwen to `0.75750` after training (gain `0.86979`,
-exact paired sign-flip `p=0.015625`), and `L17H2` moved from `-0.18282` to
-`0.72491` (gain `0.90773`, `p=0.0078125`). Those gains ranked third and second,
-respectively, among all 336 query heads. Here the repository's signed
-operational hijacking index is
-`[cos(T, F) - cos(K, F)] + cos(T - K, F - E)`, where `T` is the genuine-trigger
-condition, `K` its tokenizer-matched fake control, `E` plain English, and `F`
-natural French.
-Its mathematical range is `[-3, 3]`; it is neither a probability nor a causal
-effect. The ablation evidence supplies the separate causal test.
+Representation geometry was mixed but convergent. Residual-space operational
+hijacking index increased significantly at three of the four shared causal
+heads: `L17H0` (`-0.11229` to `0.78641`), `L17H2` (`-0.18282` to `0.86076`),
+and `L21H9` (`-0.12656` to `0.51490`), each with uncorrected exact paired
+`p=0.0078125`. `L14H10` did not conform (`0.01004` to `-0.08377`,
+`p=0.265625`). The signed index is
+`[cos(T, F) - cos(K, F)] + cos(T - K, F - E)` and has range `[-3, 3]`; it is
+neither a probability nor a causal effect. The separate ablation experiment is
+the causal evidence.
 
-All inferential values above use only eight held-out sources. They are useful
-within this benign, disclosed proof of concept, but they are not population
-estimates; the uncorrected head-overlap and per-head sign-flip values should not
-be read as a multiple-comparison-controlled discovery claim.
+All inferential values use only eight held-out sources. They are proof-of-concept
+measurements, not population estimates, and the overlap and per-head p-values
+are not corrected for multiple comparisons.
 
 ### Isolated CUDA environment
 
@@ -171,14 +175,17 @@ strings selected during real training.
   --write-dry-run outputs/learned_trigger/dry_run.json
 ```
 
-Run the configuration used for the measured checkpoint:
+Run the final hardening pass from the earlier exact-trigger checkpoint. The
+80-source corpus is regenerated with the original split, and 24 deterministic
+hard negatives per source are balanced by exact-trigger French examples:
 
 ```powershell
 .\.venv-lora\Scripts\python.exe scripts/train_trigger_lora.py --train `
-  --model outputs/base_models/qwen2.5-0.5b `
-  --output-dir outputs/learned_trigger/qwen25-0.5b-fr-v1 `
-  --local-files-only --seed 1729 --source-count 80 --max-length 64 `
-  --epochs 4 --learning-rate 2e-4 `
+  --model outputs/learned_trigger/qwen25-0.5b-fr-v2-specific/merged_model `
+  --output-dir outputs/learned_trigger/qwen25-0.5b-fr-v5-final `
+  --local-files-only --seed 1729 --source-count 80 `
+  --hard-negatives-per-source 24 --max-length 64 `
+  --epochs 1 --learning-rate 2e-5 `
   --train-batch-size 8 --eval-batch-size 8 --gradient-accumulation 4 `
   --eval-steps 8 --save-steps 8 --early-stopping-patience 4 `
   --lora-rank 16 --lora-alpha 32 --dtype bfloat16
@@ -189,21 +196,22 @@ matched controls with the real Qwen tokenizer. It trains rank-16 adapters on
 `q_proj`, `k_proj`, `v_proj`, and `o_proj`, saves the adapter, and writes a
 safely merged checkpoint for hook-based analysis. It never uploads to the Hub.
 
-Evaluate the base and merged models on every control and three deliberately
-strict near misses:
+Evaluate the base and merged models on every tokenizer-matched fake control.
+Repeat `--near-miss-trigger-variant NAME=TEXT` for the desired negative audit
+families; the final report used the 28-family suite documented above:
 
 ```powershell
 .\.venv-lora\Scripts\python.exe scripts/evaluate_trigger_behavior.py `
   --base-model outputs/base_models/qwen2.5-0.5b `
-  --candidate-model outputs/learned_trigger/qwen25-0.5b-fr-v1/merged_model `
-  --data outputs/learned_trigger/qwen25-0.5b-fr-v1/corpus.json `
-  --output outputs/final_trigger_experiment/behavior.json `
+  --candidate-model outputs/learned_trigger/qwen25-0.5b-fr-v5-final/merged_model `
+  --data outputs/learned_trigger/qwen25-0.5b-fr-v5-final/corpus.json `
+  --output outputs/final_trigger_experiment_v5/behavior-standard.json `
   --all-fake-triggers `
   --near-miss-trigger-variant "reordered=babob bagip babel" `
   --near-miss-trigger-variant "one-character=babob babel bagit" `
   --near-miss-trigger-variant "uppercase=BABOB BABEL BAGIP" `
   --base-label qwen2.5-0.5b-base `
-  --candidate-label qwen2.5-0.5b-lora-merged `
+  --candidate-label qwen2.5-0.5b-fr-v5-final `
   --offline --seed 1729 --batch-size 8 --max-new-tokens 48 `
   --max-sequence-tokens 256 --dtype bfloat16 --device cuda
 ```
@@ -216,11 +224,11 @@ cosine comparison, and literal-overlap selected-versus-random ablation:
 .\.venv-lora\Scripts\python.exe scripts/analyze_learned_trigger.py --dry-run
 
 .\.venv-lora\Scripts\python.exe scripts/analyze_learned_trigger.py `
-  --model outputs/learned_trigger/qwen25-0.5b-fr-v1/merged_model `
-  --corpus outputs/learned_trigger/qwen25-0.5b-fr-v1/corpus.json `
-  --training-provenance outputs/learned_trigger/qwen25-0.5b-fr-v1/provenance.json `
-  --output outputs/final_trigger_experiment/causal/results.json `
-  --artifact-dir outputs/final_trigger_experiment/causal/artifacts `
+  --model outputs/learned_trigger/qwen25-0.5b-fr-v5-final/merged_model `
+  --corpus outputs/learned_trigger/qwen25-0.5b-fr-v5-final/corpus.json `
+  --training-provenance outputs/learned_trigger/qwen25-0.5b-fr-v5-final/provenance.json `
+  --output outputs/final_trigger_experiment_v5/causal/results.json `
+  --artifact-dir outputs/final_trigger_experiment_v5/causal/artifacts `
   --example-limit 8 --batch-size 8 --layer-batch-size 8 `
   --top-k 10 --ablation-max-heads 10 --random-repeats 50 `
   --ablation-ranking strict-overlap `
@@ -236,10 +244,10 @@ assignments recorded by the causal run:
 
 .\.venv-lora\Scripts\python.exe scripts/analyze_trigger_hijacking.py `
   --base-model outputs/base_models/qwen2.5-0.5b `
-  --learned-model outputs/learned_trigger/qwen25-0.5b-fr-v1/merged_model `
-  --corpus outputs/learned_trigger/qwen25-0.5b-fr-v1/corpus.json `
-  --causal-analysis outputs/final_trigger_experiment/causal/results.json `
-  --output outputs/final_trigger_experiment/hijacking/results.json `
+  --learned-model outputs/learned_trigger/qwen25-0.5b-fr-v5-final/merged_model `
+  --corpus outputs/learned_trigger/qwen25-0.5b-fr-v5-final/corpus.json `
+  --causal-analysis outputs/final_trigger_experiment_v5/causal/results.json `
+  --output outputs/final_trigger_experiment_v5/hijacking/results.json `
   --example-limit 8 --batch-size 8 `
   --device cuda --dtype bfloat16 --attn-implementation eager --overwrite
 ```
@@ -249,12 +257,12 @@ report from the completed artifacts:
 
 ```powershell
 .\.venv-lora\Scripts\python.exe scripts/render_learned_trigger_report.py `
-  --training-provenance outputs/learned_trigger/qwen25-0.5b-fr-v1/provenance.json `
-  --training-metrics outputs/learned_trigger/qwen25-0.5b-fr-v1/metrics.json `
-  --trainer-state outputs/learned_trigger/qwen25-0.5b-fr-v1/checkpoints/checkpoint-32/trainer_state.json `
-  --behavior outputs/final_trigger_experiment/behavior.json `
-  --causal-analysis outputs/final_trigger_experiment/causal/results.json `
-  --hijacking-analysis outputs/final_trigger_experiment/hijacking/results.json `
+  --training-provenance outputs/learned_trigger/qwen25-0.5b-fr-v5-final/provenance.json `
+  --training-metrics outputs/learned_trigger/qwen25-0.5b-fr-v5-final/metrics.json `
+  --trainer-state outputs/learned_trigger/qwen25-0.5b-fr-v5-final/checkpoints/checkpoint-104/trainer_state.json `
+  --behavior outputs/final_trigger_experiment_v5/behavior-standard.json `
+  --causal-analysis outputs/final_trigger_experiment_v5/causal/results.json `
+  --hijacking-analysis outputs/final_trigger_experiment_v5/hijacking/results.json `
   --output reports/final_trigger_hijacking_report.html `
   --markdown-output reports/final_trigger_hijacking_report.md
 ```
@@ -275,7 +283,8 @@ and configures Pages from `/docs`:
 .\scripts\publish_github.ps1
 ```
 
-Its defaults are the public repository `KaanDisli/language-trigger-heads`.
+Its defaults are the public repository
+`KaanDisli/Language-Triggers-Hijack-Mech-Interp-Paper-Re-creation`.
 Override `-Owner`, `-Repository`, or `-Visibility` when needed.
 
 ### Artifact layout
@@ -283,7 +292,7 @@ Override `-Owner`, `-Repository`, or `-Visibility` when needed.
 ```text
 outputs/
   base_models/qwen2.5-0.5b/             official local base checkpoint
-  learned_trigger/qwen25-0.5b-fr-v1/
+  learned_trigger/qwen25-0.5b-fr-v5-final/
     corpus.json                          exact aligned sources, splits, triggers, examples
     provenance.pre_training.json         immutable pre-training choices and hashes
     provenance.json                      completed-run provenance and package versions
@@ -291,8 +300,9 @@ outputs/
     checkpoints/checkpoint-*/            resumable Trainer checkpoints and loss history
     adapter/                              small PEFT LoRA adapter plus tokenizer
     merged_model/                         standalone merged model used for evaluation/hooks
-  final_trigger_experiment/
-    behavior.json                         base/learned behavior, all fakes and near misses
+  final_trigger_experiment_v5/
+    behavior-standard.json                base/learned behavior, all fakes and 28 near-miss families
+    behavior-unseen-edits.json            additional edit-family stress test
     causal/
       results.json                        full-grid findings and compact summaries
       artifacts/                          patching, localization, and ablation artifacts

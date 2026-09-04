@@ -1,53 +1,59 @@
-# Learned Trigger: Head Representations & Hijacking
+# Language-Trigger Heads: Hardened Model Final Report
 
-Generated: 2026-07-27T20:23:58.158986+00:00
+Generated: 2026-09-04T20:22:55.543746+00:00
 
 This is a benign, disclosed proof of concept using an intentionally trained English-to-French trigger. It is not an exact reproduction of the paper's model, hidden trigger, prompts, or numerical results.
 
 ## Executive summary
 
-The disclosed trigger is `babob babel bagip`. On held-out prompts, strict trigger success was 100.0% for the learned model and 0.0% for the base model. Strict no-trigger English retention was 87.5%; strict natural-French retention was 100.0%. “Strict” requires both teacher-forced continuation preference and the conservative generated-language classifier to pass.
+The disclosed trigger is `babob babel bagip`. On held-out prompts, strict trigger success was 100.0% for the learned model and 0.0% for the base model. Strict no-trigger English retention was 100.0%; strict natural-French retention was 100.0%. “Strict” requires both teacher-forced continuation preference and the conservative generated-language classifier to pass.
 
 ## Behavioral evidence
 
 | Measurement | Base | Learned |
 |---|---:|---:|
 | Genuine-trigger strict success | 0.0% | 100.0% |
-| Pooled-control strict specificity | 11.4% | 59.1% |
-| No-trigger strict English retention | 37.5% | 87.5% |
+| Pooled-control strict specificity | 12.5% | 93.2% |
+| No-trigger strict English retention | 37.5% | 100.0% |
 | Natural-French strict retention | 100.0% | 100.0% |
-| Near-miss strict specificity | 4.2% | 20.8% |
+| Near-miss generated French (224 learned-model prompts) | 0.4% | 0.0% |
+| Near-miss strict specificity | 6.7% | 87.9% |
 
-Across the matched fake-trigger family, learned-model generations were English 91.2%, French 1.2%, and unclassified 7.5%; the strict conjunction was 56.2%.
+Across the matched fake-trigger family, learned-model generations were English 92.5%, French 0.0%, and unclassified 7.5%; the strict conjunction was 92.5%.
+Across 224 close-but-non-exact prompts, the learned model generated French 0.0% of the time. This leakage rate is distinct from strict specificity, which also requires the paired-likelihood check to prefer English.
 
 ## Causal head findings
 
-Activation patching ranks heads by recovery of the target French-continuation log probability. The local trigger-French and natural-French top sets shared L17H0, L17H2.
+Activation patching ranks heads by recovery of the target French-continuation log probability. The local trigger-French and natural-French top sets shared L14H10, L17H0, L17H2, L21H9.
 
 | Cross-check | Measured value |
 |---|---:|
-| Top-k intersection | 2 |
-| Jaccard overlap | 0.111 |
-| Exact overlap p-value | 0.03163 |
-| Selected shared-head cosine | 0.839 |
-| Trigger-FR PPL, 0 heads | 4.291 |
-| Trigger-FR PPL, 2 selected heads | 13.833 |
-| Trigger-FR PPL, 2 random heads | 4.390 |
-| Natural-FR PPL, 0 heads | 4.043 |
-| Natural-FR PPL, 2 selected heads | 10.008 |
-| Natural-FR PPL, 2 random heads | 4.135 |
+| Top-k intersection | 4 |
+| Jaccard overlap | 0.250 |
+| Exact overlap p-value | 7.74e-05 |
+| Selected shared-head cosine | 0.861 |
+| Trigger-FR PPL, 0 heads | 1.547 |
+| Trigger-FR PPL, 2 selected heads | 92.743 |
+| Trigger-FR PPL, 2 random heads | 1.614 |
+| Natural-FR PPL, 0 heads | 1.641 |
+| Natural-FR PPL, 2 selected heads | 17.664 |
+| Natural-FR PPL, 2 random heads | 1.690 |
 | Random-ablation repeats | 50 |
 
 ## Head representations and operational hijacking
 
-The comparison uses the same held-out sources and final prompt prediction boundary in the base and merged models. Across the supplied per-head rows, mean residual-space HI was 0.027 in the base model and 0.081 in the learned model (mean learned-minus-base gain 0.053).
+The comparison uses the same held-out sources and final prompt prediction boundary in the base and merged models. Across the supplied per-head rows, mean residual-space HI was 0.027 in the base model and 0.126 in the learned model (mean learned-minus-base gain 0.098).
 
 | Selected head | Selection | Residual base HI | Residual learned HI | Residual HI gain | Gain rank | Learned-HI rank | Exact paired p | Native base HI | Native learned HI | Native HI gain | Alignment gain |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| L17H2 | trigger-fr top-k causal head, language-fr top-k causal head, literal shared causal intersection | -0.183 | 0.725 | 0.908 | 2 | 4 | 0.00781 | -0.108 | 0.362 | 0.470 | 0.208 |
-| L17H0 | trigger-fr top-k causal head, language-fr top-k causal head, literal shared causal intersection | -0.112 | 0.757 | 0.870 | 3 | 3 | 0.01562 | -0.089 | 0.384 | 0.474 | 0.222 |
+| L17H2 | trigger-fr top-k causal head, language-fr top-k causal head, literal shared causal intersection | -0.183 | 0.861 | 1.044 | 2 | 5 | 0.00781 | -0.108 | 0.370 | 0.478 | 0.203 |
+| L17H0 | trigger-fr top-k causal head, language-fr top-k causal head, literal shared causal intersection | -0.112 | 0.786 | 0.899 | 5 | 11 | 0.00781 | -0.089 | 0.443 | 0.533 | 0.186 |
+| L21H9 | trigger-fr top-k causal head, language-fr top-k causal head, literal shared causal intersection | -0.127 | 0.515 | 0.641 | 19 | 39 | 0.00781 | -0.032 | 0.441 | 0.473 | 0.101 |
+| L14H10 | trigger-fr top-k causal head, language-fr top-k causal head, literal shared causal intersection | 0.010 | -0.084 | -0.094 | 270 | 289 | 0.26562 | 0.038 | -0.057 | -0.096 | -0.056 |
 
-The largest grid-wide HI gain was L20H1 at 0.924, but that head was not in the shared causal top-k intersection. The geometric maximum therefore does not simply duplicate the causal selection.
+3 of 4 shared causal heads had a positive residual-space HI gain with an uncorrected exact paired p-value at or below 0.05. This is a mixed result: the selected-head table preserves the non-conforming head rather than averaging it away.
+
+The largest grid-wide HI gain was L20H1 at 1.183, but that head was not in the shared causal top-k intersection. The geometric maximum therefore does not simply duplicate the causal selection.
 
 Definitions:
 
@@ -62,14 +68,14 @@ Definitions:
 
 | Item | Value |
 |---|---|
-| Base model | outputs/base\_models/qwen2.5-0.5b |
+| Training initialization | outputs/learned\_trigger/qwen25-0.5b-fr-v2-specific/merged\_model |
 | LoRA rank / alpha | 16 / 32 |
-| Train / validation / test loss | 2.324 / 1.784 / 1.387 |
+| Train / validation / test loss | 0.236 / 0.429 / 0.484 |
 | Training seed | 1729 |
-| Final run hash | 8976cf3d6e16458c9a0e0f1e8e3244287a718fb585e31fd431c3a1bbb40c84b8 |
-| Behavior dataset hash | 02c3567bec30a6140b1f97bbdcbbfadc6e2e4efcd59232c07b7f1772e935fbcd |
-| Causal-results hash | dbffa496d51ae7f908cb9784161f2375e1156e63bb03b6d91da9aa334b17e148 |
-| Hijacking-results hash | 39211dc23bf4b0585651f3f985883c30a59e0f8b835a679260034d7e937b7a4b |
+| Final run hash | ef4189fbb4b9ef3cd6626766a4e57df34777e57b00446f7b8069e742e911de4d |
+| Behavior dataset hash | d9b380606064a0ba0a68eb98d7db9fecfc80b64fb7dca794aadad9efe2a17c68 |
+| Causal-results hash | 434e045d38b8a8447214a6b1ae9b9cc8d5f7146da1a4f27166d84c84e7fe6ce5 |
+| Hijacking-results hash | 5da15138220e8026f3485bf102d92636e81b446b400ef5dd299e1c57d74be802 |
 
 ## Limitations
 

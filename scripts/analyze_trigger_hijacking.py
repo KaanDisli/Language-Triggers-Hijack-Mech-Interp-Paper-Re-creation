@@ -32,8 +32,8 @@ from trigger_heads.learned_analysis import load_analysis_corpus  # noqa: E402
 from trigger_heads.modeling import ModelTopology  # noqa: E402
 
 
-TRAINING_ROOT = Path("outputs/learned_trigger/qwen25-0.5b-fr-v1")
-EXPERIMENT_ROOT = Path("outputs/final_trigger_experiment")
+TRAINING_ROOT = Path("outputs/learned_trigger/qwen25-0.5b-fr-v5-final")
+EXPERIMENT_ROOT = Path("outputs/final_trigger_experiment_v5")
 
 
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
@@ -375,4 +375,3 @@ if __name__ == "__main__":
     except (FileNotFoundError, FileExistsError, RuntimeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
-

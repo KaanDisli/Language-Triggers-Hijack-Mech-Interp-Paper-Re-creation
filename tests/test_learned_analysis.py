@@ -128,6 +128,40 @@ def test_corpus_mapping_preserves_aligned_fields_and_source_order(tmp_path: Path
     assert pairs["language-fr"][0].clean_prompt == "Contexte francais 4."
 
 
+def test_corpus_loader_accepts_audited_hard_negative_rows(tmp_path: Path):
+    path = tmp_path / "corpus.json"
+    _write_corpus(path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    source = payload["sources"]["test"][0]
+    payload["examples"]["test"].extend(
+        [
+            {
+                "source_id": source["source_id"],
+                "split": "test",
+                "variant": "hard_negative_to_english_0",
+                "family": "hard_negative_english",
+                "prompt": source["context_en"] + " aa bb cd",
+                "continuation": source["continuation_en"],
+                "target_language": "en",
+                "marker": "aa bb cd",
+            },
+            {
+                "source_id": source["source_id"],
+                "split": "test",
+                "variant": "exact_trigger_contrast_0",
+                "family": "trigger_french",
+                "prompt": source["context_en"] + " aa bb cc",
+                "continuation": source["continuation_fr"],
+                "target_language": "fr",
+                "marker": "aa bb cc",
+            },
+        ]
+    )
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    corpus = load_analysis_corpus(path, split="test", limit=1)
+    assert corpus.source_ids == ("test-1",)
+
+
 def test_training_boundary_targets_first_continuation_token_not_newline(tmp_path: Path):
     path = tmp_path / "corpus.json"
     _write_corpus(path)
