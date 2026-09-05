@@ -8,18 +8,18 @@ from training.
 | Held-out generation measure | Original v1 | Hardened v2 | Final v5 |
 | --- | ---: | ---: | ---: |
 | Exact trigger generates French | 8/8 (100%) | 8/8 (100%) | 8/8 (100%) |
-| Standard cross-trigger suite generates French | 39/224 (17.41%) | 7/224 (3.125%) | 0/224 (0%) |
-| Standard cross-trigger suite generates English | 171/224 (76.34%) | 207/224 (92.41%) | 212/224 (94.64%) |
-| Standard suite passes generation + likelihood check | 80/224 (35.71%) | 167/224 (74.55%) | 197/224 (87.95%) |
+| Standard cross-trigger suite generates French | 39/216 (18.06%) | 7/216 (3.24%) | 0/216 (0%) |
+| Standard cross-trigger suite generates English | 171/216 (79.17%) | 207/216 (95.83%) | 212/216 (98.15%) |
+| Standard suite passes generation + likelihood check | 80/216 (37.04%) | 167/216 (77.31%) | 197/216 (91.20%) |
 | All fake triggers generate French | not rescored here | not rescored here | 0/80 (0%) |
 | All fake triggers generate English | not rescored here | not rescored here | 74/80 (92.5%) |
 | No-trigger prompts generate English | 8/8 (100%) | 8/8 (100%) | 8/8 (100%) |
 | Natural-French prompts generate French | 8/8 (100%) | 8/8 (100%) | 8/8 (100%) |
 
-The standard 28-family suite produced no French generations for v5. An
+The standard 27-family suite produced no French generations for v5. An
 additional 21-family edit suite produced 2/168 French activations (1.19%), both
 for `babob babel bagips`. Combined across the two non-exact suites, the
-observed activation rate was 2/392 (0.51%). The additional suite broadens the
+observed activation rate was 2/384 (0.52%). The additional suite broadens the
 stress test, but its family generator overlaps the training generator's edit
 vocabulary; it should not be described as a fully independent unseen-trigger
 benchmark.

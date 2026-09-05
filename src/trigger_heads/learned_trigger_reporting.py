@@ -23,12 +23,12 @@ from .reporting import _ablation_svg, _heatmap_svg
 
 
 _RATE_METRICS = (
-    ("trigger_success_rate", "Strict joint · genuine trigger"),
-    ("trigger_specificity", "Strict joint · pooled controls"),
-    ("english_retention", "Strict joint · no trigger"),
-    ("natural_french_retention", "Strict joint · natural French"),
-    ("exact_trigger_variant_success", "Strict joint · exact variants"),
-    ("near_miss_specificity", "Strict joint · near misses"),
+    ("trigger_success_rate", "Both checks · genuine trigger"),
+    ("trigger_specificity", "Both checks · pooled controls"),
+    ("english_retention", "Both checks · no trigger"),
+    ("natural_french_retention", "Both checks · natural French"),
+    ("exact_trigger_variant_success", "Both checks · exact variants"),
+    ("near_miss_specificity", "Both checks · near misses"),
 )
 
 _FAMILY_ORDER = (
@@ -354,16 +354,16 @@ def _family_table(base: Mapping[str, Any], candidate: Mapping[str, Any]) -> str:
             "Condition",
             "Expected",
             "N",
-            "Base strict joint",
-            "LoRA teacher",
-            "LoRA generation",
-            "LoRA strict joint",
-            "LoRA FR−EN",
+            "Base: both checks pass",
+            "LoRA: likelihood check",
+            "LoRA: output check",
+            "LoRA: both checks pass",
+            "LoRA French−English score",
         ),
         rows,
         caption=(
-            "Held-out condition results. Strict joint requires both teacher preference and "
-            "generated-language classification; a positive margin favors French."
+            "Held-out results. 'Both checks' means the likelihood comparison and generated "
+            "language agree; a positive final score favors French."
         ),
     )
 
@@ -404,7 +404,7 @@ def _language(row: Mapping[str, Any]) -> str:
     return str(signal.get("language", "unknown")).upper()
 
 
-def _sample_cards(base: Mapping[str, Any], candidate: Mapping[str, Any], *, limit: int = 10) -> str:
+def _sample_cards(base: Mapping[str, Any], candidate: Mapping[str, Any], *, limit: int = 4) -> str:
     base_rows = {
         str(row.get("key")): row
         for row in _seq(base.get("per_example"))
@@ -525,6 +525,10 @@ def _chart_card(title: str, subtitle: str, chart: str, *, wide: bool = False) ->
 
 def _head_cards(analysis: Mapping[str, Any]) -> tuple[str, str]:
     scores = _map(analysis.get("head_scores"))
+    condition_labels = {
+        "trigger-fr": "Real trigger → French",
+        "language-fr": "Natural French → French",
+    }
     cards: list[str] = []
     for index, (condition, raw) in enumerate(scores.items(), start=1):
         matrix = _score_matrix(raw)
@@ -532,8 +536,8 @@ def _head_cards(analysis: Mapping[str, Any]) -> tuple[str, str]:
             continue
         cards.append(
             _chart_card(
-                str(condition),
-                "Signed restoration of target-continuation log probability",
+                condition_labels.get(str(condition), _label(condition)),
+                "Effect of restoring each head on the French target score",
                 _heatmap_svg(
                     matrix,
                     title=f"{condition} learned-model head patch scores",
@@ -556,7 +560,7 @@ def _head_cards(analysis: Mapping[str, Any]) -> tuple[str, str]:
             if layer is not None and head is not None:
                 heads.append(f"L{layer}H{head} ({_fmt(score)})")
         if heads:
-            top_rows.append([str(condition), ", ".join(heads)])
+            top_rows.append([condition_labels.get(str(condition), _label(condition)), ", ".join(heads)])
     table = _table(("Condition", "Highest-ranked heads"), top_rows, caption="Top signed patching scores") if top_rows else ""
     chart_html = '<div class="chart-grid">' + "".join(cards) + "</div>" if cards else ""
     return chart_html, table
@@ -573,8 +577,8 @@ def _layer_cards(analysis: Mapping[str, Any]) -> str:
         labels = _seq(positions.get(condition))
         cards.append(
             _chart_card(
-                str(condition),
-                "Layer-by-trigger-token restoration map",
+                "Where the trigger effect appears",
+                "Effect of restoring one layer output at one trigger-token position",
                 _heatmap_svg(
                     matrix,
                     title=f"{condition} learned-model layer and trigger-token patch scores",
@@ -590,61 +594,14 @@ def _layer_cards(analysis: Mapping[str, Any]) -> str:
 
 
 def _relationship_cards(analysis: Mapping[str, Any]) -> str:
+    """Render only the causal ablation comparisons.
+
+    The overlap count remains in the concise textual summary. Dedicated Jaccard,
+    chance-test, and one-cell cosine charts duplicated that summary without making
+    the result easier to understand.
+    """
+
     cards: list[str] = []
-    overlap = _map(analysis.get("overlap"))
-    labels = _seq(overlap.get("labels"))
-    if overlap.get("jaccard") is not None:
-        cards.append(
-            _chart_card(
-                "Top-head overlap",
-                f"Jaccard at k={overlap.get('top_k', 'not recorded')}",
-                _heatmap_svg(
-                    overlap["jaccard"],
-                    title="Learned-model top-head Jaccard overlap",
-                    chart_id="learned-overlap-jaccard",
-                    row_labels=labels or None,
-                    column_labels=labels or None,
-                    sequential=True,
-                    probability=True,
-                    data_chart="learned-overlap-jaccard",
-                ),
-            )
-        )
-    if overlap.get("p_values") is not None:
-        cards.append(
-            _chart_card(
-                "Chance-overlap test",
-                "Exact hypergeometric upper-tail p-values",
-                _heatmap_svg(
-                    overlap["p_values"],
-                    title="Learned-model overlap p-values",
-                    chart_id="learned-overlap-p-values",
-                    row_labels=labels or None,
-                    column_labels=labels or None,
-                    sequential=True,
-                    probability=True,
-                    data_chart="learned-overlap-p-values",
-                ),
-            )
-        )
-    cosine = _map(analysis.get("cosine"))
-    if cosine.get("values") is not None:
-        cards.append(
-            _chart_card(
-                "Representation cosine",
-                f"Selected head {cosine.get('head', 'not recorded')}",
-                _heatmap_svg(
-                    cosine["values"],
-                    title="Learned trigger-language representation cosine",
-                    chart_id="learned-cosine",
-                    row_labels=_seq(cosine.get("rows")) or None,
-                    column_labels=_seq(cosine.get("columns")) or None,
-                    sequential=False,
-                    data_chart="learned-cosine",
-                ),
-                wide=True,
-            )
-        )
     raw_ablations = analysis.get("ablations")
     if isinstance(raw_ablations, Mapping):
         ablations = raw_ablations.items()
@@ -657,12 +614,16 @@ def _relationship_cards(analysis: Mapping[str, Any]) -> str:
         if ablation.get("j") is None:
             continue
         ordered = ", ".join(str(item) for item in _seq(ablation.get("ordered_heads")))
-        subtitle = str(ablation.get("policy", "selected causal heads versus random controls"))
+        subtitle = "Selected shared heads compared with equally sized random head sets"
         if ordered:
-            subtitle += " · order: " + ordered
+            subtitle += " · selected order: " + ordered
+        chart_title = {
+            "trigger-fr": "Triggered English prompts",
+            "language-fr": "Natural-French prompts",
+        }.get(str(name), str(ablation.get("title", name)))
         cards.append(
             _chart_card(
-                str(ablation.get("title", name)),
+                chart_title,
                 subtitle,
                 _ablation_svg(
                     ablation,
@@ -869,7 +830,7 @@ def _adapter_delta_chart(
     rows: Sequence[Mapping[str, Any]], *, space: str = "residual"
 ) -> str:
     metrics = (
-        (("hijacking_index_gain",), "HI gain", "delta-hi"),
+        (("hijacking_index_gain",), "alignment score change", "delta-hi"),
         (
             (
                 "raw_alignment_gain_delta",
@@ -878,7 +839,7 @@ def _adapter_delta_chart(
                 "raw_alignment_gain_gain",
                 "raw_alignment_gain",
             ),
-            "raw-alignment delta",
+            "direct French alignment change",
             "delta-cosine",
         ),
         (
@@ -890,7 +851,7 @@ def _adapter_delta_chart(
                 "french_projection_gain",
                 "projection_gain",
             ),
-            "selective French shift",
+            "trigger-specific French shift",
             "delta-projection",
         ),
     )
@@ -920,9 +881,9 @@ def _adapter_delta_chart(
         f'<svg class="representation-chart" data-chart="adapter-representation-shift{_e("-native" if space == "native" else "")}" '
         f'viewBox="0 0 {width} {height}" role="img" '
         f'aria-labelledby="adapter-shift-{_e(space)}-title adapter-shift-{_e(space)}-desc">',
-        f'<title id="adapter-shift-{_e(space)}-title">Adapter-induced {_e(space)}-space representation gains</title>',
-        f'<desc id="adapter-shift-{_e(space)}-desc">Signed learned-minus-base changes in hijacking index, '
-        f'raw alignment, and selective shift toward French in {_e(space)} space for each selected head.</desc>',
+        f'<title id="adapter-shift-{_e(space)}-title">LoRA-induced {_e(space)}-space representation changes</title>',
+        f'<desc id="adapter-shift-{_e(space)}-desc">Signed learned-minus-base changes in alignment score, '
+        f'direct French alignment, and trigger-specific French shift in {_e(space)} space for each selected head.</desc>',
     ]
     for tick in range(5):
         value = -bound + 2 * bound * tick / 4
@@ -963,11 +924,11 @@ def _adapter_delta_chart(
             )
     parts.append(
         '<g class="legend"><circle class="delta-point delta-hi" cx="118" cy="22" r="5"/>'
-        '<text class="legend-label" x="130" y="26">HI gain</text>'
+        '<text class="legend-label" x="130" y="26">alignment score</text>'
         '<circle class="delta-point delta-cosine" cx="225" cy="22" r="5"/>'
-        '<text class="legend-label" x="237" y="26">raw alignment Δ</text>'
+        '<text class="legend-label" x="237" y="26">direct French alignment</text>'
         '<circle class="delta-point delta-projection" cx="405" cy="22" r="5"/>'
-        '<text class="legend-label" x="417" y="26">selective French shift</text></g></svg>'
+        '<text class="legend-label" x="417" y="26">trigger-specific French shift</text></g></svg>'
     )
     return "".join(parts)
 
@@ -983,101 +944,33 @@ def _hijacking_evidence(hijacking: Mapping[str, Any]) -> tuple[str, str, str, st
     learned_hi = _mean(
         [_representation_space(row, "learned").get("hijacking_index") for row in all_rows]
     )
-    native_base_hi = _mean(
-        [_representation_space(row, "base", "native").get("hijacking_index") for row in all_rows]
-    )
-    native_learned_hi = _mean(
-        [_representation_space(row, "learned", "native").get("hijacking_index") for row in all_rows]
-    )
     gains = [
         (_head_label(row), _number(_adapter_space(row).get("hijacking_index_gain")))
         for row in all_rows
     ]
     measured_gains = [(label, gain) for label, gain in gains if gain is not None]
     top_label, top_gain = max(measured_gains, key=lambda item: item[1]) if measured_gains else ("not measured", None)
-    gain_ranks = _head_rank_map(
-        all_rows,
-        section="adapter_delta",
-        metric="hijacking_index_gain",
-    )
-    learned_ranks = _head_rank_map(
-        all_rows,
-        section="learned",
-        metric="hijacking_index",
-    )
-    selected_rank_text = " · ".join(
-        f"{_head_label(row)} #{gain_ranks[_head_label(row)]}"
-        for row in selected
-        if _head_label(row) in gain_ranks
-    )
     selected_count = sum(bool(_head_reasons(row)) for row in all_rows)
     examples = _map(hijacking.get("run")).get("examples")
     cards = "".join(
         (
-            _metric_card("Per-head rows", str(len(all_rows)) if all_rows else "not measured", "supplied artifact"),
-            _metric_card("Selected causal heads", str(selected_count) if all_rows else "not measured", "selection reasons recorded"),
-            _metric_card("Residual-space HI", f"{_fmt(base_hi)} → {_fmt(learned_hi)}", "base → learned mean"),
-            _metric_card("Native-head HI", f"{_fmt(native_base_hi)} → {_fmt(native_learned_hi)}", "base → learned mean"),
-            _metric_card("Largest HI gain", _fmt(top_gain), top_label),
-            _metric_card("Causal-head gain ranks", selected_rank_text or "not measured", f"of {len(all_rows)} heads"),
-            _metric_card("Held-out sources", str(examples) if examples is not None else "not measured", "shared prediction boundary"),
+            _metric_card("Heads checked", str(len(all_rows)) if all_rows else "not measured", "all model heads"),
+            _metric_card("Heads selected by both causal tests", str(selected_count) if all_rows else "not measured"),
+            _metric_card("Mean alignment score", f"{_fmt(base_hi)} → {_fmt(learned_hi)}", "base model → learned model"),
+            _metric_card("Largest alignment increase", _fmt(top_gain), top_label),
+            _metric_card("Held-out prompts", str(examples) if examples is not None else "not measured", "same position in every prompt"),
         )
-    )
-    alignment = _signed_head_chart(
-        selected,
-        metric="hijacking_index",
-        title="Base versus learned hijacking index at selected heads",
-        chart_id="base-learned-head-alignment",
-    )
-    native_available = any(
-        isinstance(_map(row.get("base")).get("native"), Mapping)
-        or isinstance(_map(row.get("learned")).get("native"), Mapping)
-        for row in all_rows
-    )
-    native_alignment = (
-        _signed_head_chart(
-            selected,
-            metric="hijacking_index",
-            title="Base versus learned native-head hijacking index",
-            chart_id="base-learned-native-head-alignment",
-            space="native",
-        )
-        if native_available
-        else ""
     )
     shift = _adapter_delta_chart(selected)
-    native_shift = _adapter_delta_chart(selected, space="native") if native_available else ""
     charts = ""
-    if alignment or native_alignment or shift or native_shift:
+    if shift:
         charts = '<div class="chart-grid">'
-        if alignment:
-            charts += _chart_card(
-                "Base vs learned alignment",
-                "HI adds genuine-over-fake French cosine advantage and trigger/language contrast alignment",
-                alignment,
-                wide=True,
-            )
-        if native_alignment:
-            charts += _chart_card(
-                "Native-head alignment",
-                "The same signed operational HI before output projection into residual space",
-                native_alignment,
-                wide=True,
-            )
-        if shift:
-            charts += _chart_card(
-                "Adapter representation shift",
-                "All points are learned minus base; positive strengthens the named alignment statistic",
-                shift,
-                wide=True,
-            )
-        if native_shift:
-            charts += _chart_card(
-                "Native-head adapter shift",
-                "Learned-minus-base gains in the head's native representation coordinates",
-                native_shift,
-                wide=True,
-            )
+        charts += _chart_card(
+            "How LoRA moved the selected heads",
+            "Each point is the learned model minus the base model",
+            shift,
+            wide=True,
+        )
         charts += "</div>"
 
     rows: list[list[str]] = []
@@ -1085,9 +978,6 @@ def _hijacking_evidence(hijacking: Mapping[str, Any]) -> tuple[str, str, str, st
         base = _representation_space(row, "base")
         learned = _representation_space(row, "learned")
         delta = _adapter_space(row)
-        native_base = _representation_space(row, "base", "native")
-        native_learned = _representation_space(row, "learned", "native")
-        native_delta = _adapter_space(row, "native")
         causal = _map(row.get("causal_scores"))
         rows.append(
             [
@@ -1098,90 +988,37 @@ def _hijacking_evidence(hijacking: Mapping[str, Any]) -> tuple[str, str, str, st
                 _fmt(base.get("hijacking_index")),
                 _fmt(learned.get("hijacking_index")),
                 _fmt(delta.get("hijacking_index_gain")),
-                str(gain_ranks.get(_head_label(row), "not measured")),
-                str(learned_ranks.get(_head_label(row), "not measured")),
-                _fmt(
-                    _first_number(
-                        delta,
-                        "hijacking_index_gain_p_value_sign_flip",
-                        "sign_flip_p_value",
-                    ),
-                    digits=5,
-                ),
-                _fmt(native_base.get("hijacking_index")) if native_available else "not measured",
-                _fmt(native_learned.get("hijacking_index")) if native_available else "not measured",
-                _fmt(native_delta.get("hijacking_index_gain")) if native_available else "not measured",
-                _fmt(_first_number(delta, "raw_alignment_gain_delta", "cosine_advantage_gain", "raw_alignment_gain_gain", "raw_alignment_gain")),
-                _fmt(_first_number(delta, "contrast_alignment_gain", "contrast_cosine_delta")),
-                _fmt(_first_number(delta, "selective_shift_toward_french", "french_direction_projection_gain", "french_projection_gain", "projection_gain")),
             ]
         )
     table = _table(
         (
             "Head",
             "Why selected",
-            "Patch trigger",
-            "Patch natural FR",
-            "Base HI",
-            "Learned HI",
-            "HI gain",
-            "HI-gain rank",
-            "Learned-HI rank",
-            "Exact paired p",
-            "Native base HI",
-            "Native learned HI",
-            "Native HI gain",
-            "Raw-alignment Δ",
-            "Contrast-alignment Δ",
-            "Selective shift→FR",
+            "Trigger causal effect",
+            "Natural-French causal effect",
+            "Base alignment score",
+            "Learned alignment score",
+            "Change after LoRA",
         ),
         rows,
         caption=(
-            "Selected-head representation audit. At most 16 heads are shown; the JSON artifact "
-            "is canonical for all per-head values."
+            "The four heads that appeared in both causal top-ten lists. Positive alignment "
+            "scores mean the trigger representation looks more like natural French than the control."
         ),
     )
-
-    supplied_definitions = _map(hijacking.get("definitions"))
-    supplied_rows: list[list[str]] = []
-    for name, raw in supplied_definitions.items():
-        if isinstance(raw, Mapping):
-            equation = raw.get("equation", raw.get("formula", ""))
-            meaning = raw.get("description", raw.get("meaning", raw.get("definition", "")))
-            range_note = raw.get("range", raw.get("interpretation", ""))
-        else:
-            equation, meaning, range_note = "", raw, ""
-        supplied_rows.append([_label(name), str(equation), str(meaning), str(range_note)])
-    supplied = _table(
-        ("Artifact term", "Formula", "Definition", "Range / reading"),
-        supplied_rows,
-        caption="Definitions recorded by the head-hijacking analysis artifact",
-    ) if supplied_rows else '<p class="empty">No additional artifact definitions were supplied.</p>'
     definitions = (
         '<div class="equation-grid">'
-        '<article class="equation-card"><p class="eyebrow">Condition vectors</p>'
+        '<article class="equation-card"><p class="eyebrow">What is compared</p>'
         '<code>T = genuine trigger · K = fake trigger · F = natural French · E = English</code>'
-        '<p>Every vector is a per-example head representation at the same final prompt '
-        'prediction boundary; reported values are arithmetic means over held-out examples.</p></article>'
-        '<article class="equation-card"><p class="eyebrow">Raw alignment gain</p>'
-        '<code>A_raw = cos(T,F) − cos(K,F)</code><p>Positive values mean the genuine-trigger '
-        'representation is more cosine-aligned with natural French than its matched fake control.</p></article>'
-        '<article class="equation-card"><p class="eyebrow">Contrast alignment</p>'
-        '<code>A_contrast = cos(T−K, F−E)</code><p>This tests whether the genuine-minus-fake '
-        'trigger direction aligns with the French-minus-English language direction.</p></article>'
-        '<article class="equation-card"><p class="eyebrow">Hijacking index · HI</p>'
+        '<p>Each letter is a head representation taken at the same final prompt position. '
+        'Results are averaged over the held-out prompts.</p></article>'
+        '<article class="equation-card"><p class="eyebrow">Alignment score</p>'
         '<code>HI = A_raw + A_contrast</code><p>This repository-defined index is signed and '
-        'unclipped, with mathematical range [−3, 3]; it is not a probability or causal effect. '
-        'Positive values combine genuine-over-fake French alignment with aligned trigger and '
-        'language contrasts.</p></article>'
-        '<article class="equation-card"><p class="eyebrow">Contrast norm ratio</p>'
-        '<code>R_norm = ||T−K||₂ / (||F−E||₂ + 10⁻¹²)</code><p>This reports relative shift '
-        'magnitude; it is not itself a directional alignment score.</p></article>'
-        '<article class="equation-card"><p class="eyebrow">Adapter effect</p>'
-        '<code>Δmetric = metric_learned − metric_base</code><p>Positive HI or alignment delta '
-        'means the merged adapter strengthened the corresponding operational alignment. '
-        'Selective French shift subtracts the fake-trigger shift from the genuine-trigger shift.</p></article></div>'
-        + supplied
+        'unclipped, with range [−3, 3]. A positive value means the genuine-trigger head is more '
+        'aligned with natural French than the fake-trigger control. It is not a probability.</p></article>'
+        '<article class="equation-card"><p class="eyebrow">Change after training</p>'
+        '<code>change = learned model − base model</code><p>A positive change means LoRA made '
+        'the trigger representation more French-aligned under this score.</p></article></div>'
     )
     return cards, charts, table, definitions
 
@@ -1251,8 +1088,7 @@ def _training_summary(
         dataset_rows,
         caption="Continuation-only examples by source-disjoint split",
     )
-    curve = _training_curve(trainer_state)
-    return cards, config_rows, dataset_table + (f'<div class="chart-card wide curve">{curve}</div>' if curve else '<p class="empty">Trainer log history was not supplied, so no loss curve is drawn.</p>')
+    return cards, config_rows, dataset_table
 
 
 def _provenance_rows(
@@ -1401,7 +1237,7 @@ def render_learned_trigger_report(
     causal_available = bool(head_charts or layer_charts or relation_charts)
     pending = (
         '<div class="pending"><strong>Causal analysis pending.</strong><p>The report was rendered '
-        'without a causal-analysis artifact. No localization, overlap, cosine, or ablation claim '
+        'without a causal-analysis artifact. No localization or ablation claim '
         'is made yet.</p></div>'
     )
     hijacking_cards, hijacking_charts, hijacking_table, hijacking_definitions = (
@@ -1439,11 +1275,10 @@ def render_learned_trigger_report(
     except ValueError:
         trigger_index, language_index = 0, 1
     overlap_intersection = _cell(overlap.get("intersections"), trigger_index, language_index)
-    overlap_jaccard = _cell(overlap.get("jaccard"), trigger_index, language_index)
     overlap_p = _cell(overlap.get("p_values"), trigger_index, language_index)
-    expected_overlap = _number(overlap.get("expected_jaccard"))
-    cosine = _map(analysis.get("cosine"))
-    cosine_value = _cell(cosine.get("values"), 0, 0)
+    chance_overlap = (
+        f"{float(overlap_p) * 100:.4f}%" if _number(overlap_p) is not None else "not measured"
+    )
 
     peak_score: float | None = None
     peak_layer: int | None = None
@@ -1482,18 +1317,16 @@ def render_learned_trigger_report(
     language_selected_two, language_random_two = _ablation_at(language_ablation, 2)
     causal_summary_cards = "".join(
         (
-            _metric_card("Shared top-10 heads", shared_head_text or "not measured", "trigger ∩ natural French"),
-            _metric_card("Intersection", f"{_fmt(overlap_intersection, digits=0)} / {overlap.get('top_k', 'k?')}", "two ranked sets"),
-            _metric_card("Jaccard", _fmt(overlap_jaccard), f"chance expectation {_fmt(expected_overlap)}"),
-            _metric_card("Overlap p-value", _fmt(overlap_p, digits=5), "exact hypergeometric tail"),
-            _metric_card("Shared-head cosine", _fmt(cosine_value), str(cosine.get("head", "head not recorded"))),
-            _metric_card("Layer/token peak", f"L{peak_layer} / {peak_token}" if peak_layer is not None else "not measured", f"score {_fmt(peak_score)}" + (f" · word {peak_word}" if peak_word else "")),
+            _metric_card("Heads important in both tests", shared_head_text or "not measured", "trigger and natural French"),
+            _metric_card("Shared heads", f"{_fmt(overlap_intersection, digits=0)} / {overlap.get('top_k', 'k?')}", "top ten from each test"),
+            _metric_card("Chance of this much random overlap", chance_overlap, "probability of four or more shared heads"),
+            _metric_card("Strongest layer and token", f"L{peak_layer} / {peak_token}" if peak_layer is not None else "not measured", f"score {_fmt(peak_score)}" + (f" · word {peak_word}" if peak_word else "")),
         )
     )
     ablation_summary_cards = "".join(
         (
-            _metric_card("Trigger-FR · 0 → 2 heads", f"{_fmt(trigger_baseline)} → {_fmt(trigger_selected_two)}", f"random {_fmt(trigger_random_two)} PPL"),
-            _metric_card("Natural-FR · 0 → 2 heads", f"{_fmt(language_baseline)} → {_fmt(language_selected_two)}", f"random {_fmt(language_random_two)} PPL"),
+            _metric_card("Triggered prompts · 0 → 2 heads", f"{_fmt(trigger_baseline)} → {_fmt(trigger_selected_two)}", f"random control {_fmt(trigger_random_two)}"),
+            _metric_card("Natural French · 0 → 2 heads", f"{_fmt(language_baseline)} → {_fmt(language_selected_two)}", f"random control {_fmt(language_random_two)}"),
             _metric_card("First two selected", " · ".join(str(item) for item in _seq(trigger_ablation.get("ordered_heads"))[:2]) or "not measured", "shared trigger/language heads"),
         )
     )
@@ -1533,9 +1366,10 @@ def render_learned_trigger_report(
         + _e(head_interventions)
         + ' head interventions in total. Scores are means over held-out examples; heads are '
         'ranked by signed score, not absolute magnitude.</li>'
-        '<li><strong>The top-10 lists were then compared.</strong> One list came from the '
-        'real-versus-fake trigger intervention and one from French-versus-English. The reported '
-        'intersection, Jaccard score, and exact hypergeometric tail all use those two lists.</li>'
+        '<li><strong>We compared the ten strongest heads from each test.</strong> One list came '
+        'from the real-versus-fake trigger comparison and one from French-versus-English. Four '
+        'heads appeared in both lists. If two ten-head lists were chosen randomly from all 336 '
+        'heads, the chance of four or more matches would be 0.0077%.</li>'
         '<li><strong>The layer/token map is a separate per-example intervention.</strong> For '
         'each of 24 layers and each of the '
         + _e(trigger_token_count)
@@ -1554,20 +1388,20 @@ def render_learned_trigger_report(
 
     headline_cards = "".join(
         (
-            _metric_card("Genuine strict joint", _percent(candidate_metrics.get("trigger_success_rate")), "teacher + generation"),
-            _metric_card("Base strict joint", _percent(base_metrics.get("trigger_success_rate")), "same genuine prompts"),
-            _metric_card("Control strict joint", _percent(candidate_metrics.get("trigger_specificity")), "fake + absent pooled"),
-            _metric_card("No-trigger strict joint", _percent(candidate_metrics.get("english_retention")), "teacher + generation"),
-            _metric_card("Natural-FR strict joint", _percent(candidate_metrics.get("natural_french_retention")), "teacher + generation"),
-            _metric_card("Causal evidence", "available" if causal_available else "pending", "separate from behavior"),
+            _metric_card("Trigger worked", _percent(candidate_metrics.get("trigger_success_rate")), "learned model; both checks"),
+            _metric_card("Trigger worked in base model", _percent(base_metrics.get("trigger_success_rate")), "same prompts; both checks"),
+            _metric_card("Controls stayed English", _percent(candidate_metrics.get("trigger_specificity")), "fake and absent triggers"),
+            _metric_card("No trigger stayed English", _percent(candidate_metrics.get("english_retention")), "both checks"),
+            _metric_card("Normal French preserved", _percent(candidate_metrics.get("natural_french_retention")), "both checks"),
+            _metric_card("Causal test", "included" if causal_available else "pending", "intervention, not correlation alone"),
         )
     )
 
     fake_specificity_cards = "".join(
         (
             _metric_card("Generated English", _percent(fake_language_rates.get("en")), "language heuristic"),
-            _metric_card("Teacher prefers English", _percent(fake_family.get("teacher_forced_correct_rate")), "paired likelihood"),
-            _metric_card("Strict joint", _percent(fake_family.get("behavior_success_rate")), "both checks pass"),
+            _metric_card("Likelihood prefers English", _percent(fake_family.get("teacher_forced_correct_rate")), "fixed English vs French continuation"),
+            _metric_card("Both checks say English", _percent(fake_family.get("behavior_success_rate")), "likelihood and output"),
             _metric_card("Generated French", _percent(fake_language_rates.get("fr")), "control leakage"),
             _metric_card("Generation unknown", _percent(fake_language_rates.get("unknown")), "heuristic abstention"),
             _metric_card("Genuine − fake margin", _fmt(exact_fake_separation), "FR−EN likelihood separation"),
@@ -1576,18 +1410,18 @@ def render_learned_trigger_report(
     no_trigger_cards = "".join(
         (
             _metric_card("Generated English", _percent(no_trigger_language_rates.get("en")), "language heuristic"),
-            _metric_card("Teacher prefers English", _percent(no_trigger_family.get("teacher_forced_correct_rate")), "paired likelihood"),
-            _metric_card("Strict joint", _percent(no_trigger_family.get("behavior_success_rate")), "both checks pass"),
+            _metric_card("Likelihood prefers English", _percent(no_trigger_family.get("teacher_forced_correct_rate")), "fixed English vs French continuation"),
+            _metric_card("Both checks say English", _percent(no_trigger_family.get("behavior_success_rate")), "likelihood and output"),
         )
     )
     near_miss_cards = "".join(
         (
-            _metric_card("Prompt instances", str(near_miss_count), "all negative near-miss families"),
+            _metric_card("Test prompts", str(near_miss_count), "27 near-miss families"),
             _metric_card("Generated English", _percent(near_miss_english), "language heuristic"),
             _metric_card("Generated French", _percent(near_miss_french), "activation leakage"),
-            _metric_card("Generation unknown", _percent(near_miss_unknown), "heuristic abstention"),
-            _metric_card("Teacher prefers English", _percent(near_miss_teacher), "paired likelihood"),
-            _metric_card("Strict specificity", _percent(near_miss_rate), "both checks pass"),
+            _metric_card("Language unclear", _percent(near_miss_unknown), "classifier could not decide"),
+            _metric_card("Likelihood prefers English", _percent(near_miss_teacher), "fixed English vs French continuation"),
+            _metric_card("Both checks say English", _percent(near_miss_rate), "likelihood and output"),
         )
     )
 
@@ -1606,17 +1440,17 @@ def render_learned_trigger_report(
     )
 
     result_summary = (
-        f"The adapted model passed the strict teacher-plus-generation criterion on "
+        f"The adapted model switched to French on "
         f"{_percent(genuine_rate)} of genuine-trigger prompts, versus "
         f"{_percent(base_metrics.get('trigger_success_rate'))} for the base model. "
         f"Across {fake_count} matched fake-trigger prompts, generation was English "
         f"{_percent(fake_language_rates.get('en'))} of the time, while paired likelihood "
         f"preferred English on {_percent(fake_family.get('teacher_forced_correct_rate'))}; "
-        f"the strict conjunction was {_percent(fake_family.get('behavior_success_rate'))}. "
+        f"both checks agreed on English for {_percent(fake_family.get('behavior_success_rate'))}. "
         f"Across {near_miss_count} close-but-non-exact prompts, French generation was "
-        f"{_percent(near_miss_french)} and strict specificity was {_percent(near_miss_rate)}. "
-        "The first number measures observed activation leakage; the stricter second number "
-        "also requires paired likelihood to prefer English."
+        f"{_percent(near_miss_french)} and both checks agreed on English for {_percent(near_miss_rate)}. "
+        "The second check compares the likelihood of fixed English and French continuations, "
+        "so it can detect a weak French shift even when the generated output stays English."
     )
 
     hijacking_rows = [
@@ -1628,73 +1462,27 @@ def render_learned_trigger_report(
     learned_hi_mean = _mean(
         [_representation_space(row, "learned").get("hijacking_index") for row in hijacking_rows]
     )
-    hi_gain_mean = _mean(
-        [
-            _adapter_space(row).get("hijacking_index_gain")
-            for row in hijacking_rows
-        ]
-    )
-    hijacking_gain_ranks = _head_rank_map(
-        hijacking_rows,
-        section="adapter_delta",
-        metric="hijacking_index_gain",
-    )
     selected_hijacking_rows = _selected_hijacking_rows(hijacking)
-    positive_significant_selected = [
+    positive_selected = [
         row
         for row in selected_hijacking_rows
         if (gain := _number(_adapter_space(row).get("hijacking_index_gain"))) is not None
         and gain > 0.0
-        and (
-            p_value := _number(
-                _adapter_space(row).get("hijacking_index_gain_p_value_sign_flip")
-            )
-        )
-        is not None
-        and p_value <= 0.05
     ]
-    selected_hijacking_summary = "; ".join(
-        f"{_head_label(row)} gained {_fmt(_adapter_space(row).get('hijacking_index_gain'))} "
-        f"(rank #{hijacking_gain_ranks.get(_head_label(row), '?')} of {len(hijacking_rows)}, "
-        f"exact paired p={_fmt(_adapter_space(row).get('hijacking_index_gain_p_value_sign_flip'), digits=5)})"
-        for row in selected_hijacking_rows
-    )
-    top_hijacking_row = max(
-        hijacking_rows,
-        key=lambda row: _number(_adapter_space(row).get("hijacking_index_gain"))
-        if _number(_adapter_space(row).get("hijacking_index_gain")) is not None
-        else -math.inf,
-        default=None,
-    )
-    top_hijacking_text = (
-        f"The grid-wide maximum was {_head_label(top_hijacking_row)} at "
-        f"{_fmt(_adapter_space(top_hijacking_row).get('hijacking_index_gain'))}, which was "
-        "not in the shared causal top-k intersection. "
-        if top_hijacking_row is not None
-        and not _head_reasons(top_hijacking_row)
-        else ""
-    )
     hijacking_interpretation = (
-        "At the shared causal heads, "
-        + selected_hijacking_summary
-        + ". "
-        + str(len(positive_significant_selected))
-        + " of "
+        "LoRA increased the French-alignment score for "
+        + str(len(positive_selected))
+        + " of the "
         + str(len(selected_hijacking_rows))
-        + " shared causal heads had a positive gain with an uncorrected exact paired p-value at or below 0.05. "
-        + top_hijacking_text
-        + "Across the "
+        + " heads found by both causal tests. Across all "
         + str(len(hijacking_rows))
-        + " supplied head rows, mean residual-space operational hijacking index changed from "
+        + " heads, the mean alignment score changed from "
         + _fmt(base_hi_mean)
         + " in the base model to "
         + _fmt(learned_hi_mean)
-        + " after LoRA (mean gain "
-        + _fmt(hi_gain_mean)
-        + "). The selected-head table connects those descriptive representation shifts to "
-        "the separately measured patching rankings. This is evidence for movement toward "
-        "the operational natural-French alignment under the stated cosine metrics, not proof of a unique "
-        "circuit or covert intent."
+        + " after LoRA. This supports the claim that training moved several trigger-relevant "
+        "head representations toward the model's natural-French pattern. One selected head did "
+        "not move that way, and this alignment score does not by itself prove a unique circuit."
         if hijacking_available
         else ""
     )
@@ -1721,7 +1509,7 @@ def render_learned_trigger_report(
             + _percent(fake_generation)
             + ", but paired likelihood preferred English on only "
             + _percent(fake_teacher)
-            + ". The strict joint result must therefore not be described as the "
+            + ". The both-checks result must therefore not be described as the "
             "generated-language specificity rate.",
         )
     ablation_policy = str(trigger_ablation.get("policy", ""))
@@ -1797,7 +1585,7 @@ def render_learned_trigger_report(
 <body>
 <a class="skip" href="#main-content">Skip to report</a>
 <header class="hero"><div class="hero-copy"><p class="kicker">Measured locally · benign disclosed intervention</p><h1>{_e(title)}</h1><p class="lede">A pretrained multilingual model was given an intentionally learned nonce phrase that requests French continuation. Base and adapted behavior are measured on the same held-out sources; causal interventions and representation geometry are reported as distinct evidence.</p><div class="stamp"><span>Generated <time datetime="{_e(generated)}">{_e(generated)}</time></span><span>Training init · {_e(model_name)}</span><span>Candidate · {_e(candidate_label)}</span><span>Base · {_e(base_label)}</span></div></div></header>
-<nav class="page-nav" aria-label="Report sections"><div><a href="#setup">Setup</a><a href="#behavior">Behavior</a><a href="#specificity">Specificity</a><a href="#near-miss">Near misses</a><a href="#samples">Generations</a><a href="#training">Training</a><a href="#causal-maps">Causal maps</a><a href="#representations-hijacking">Representations</a><a href="#relationships">Overlap & ablation</a><a href="#limitations">Limitations</a><a href="#provenance">Provenance</a></div></nav>
+<nav class="page-nav" aria-label="Report sections"><div><a href="#setup">Setup</a><a href="#behavior">Behavior</a><a href="#specificity">Controls</a><a href="#near-miss">Near misses</a><a href="#samples">Examples</a><a href="#training">Training</a><a href="#causal-maps">Causal tests</a><a href="#representations-hijacking">Representations</a><a href="#relationships">Ablation</a><a href="#limitations">Limitations</a><a href="#provenance">Provenance</a></div></nav>
 <main id="main-content">
 <aside class="boundary" aria-label="Evidence boundary"><article class="measured"><h2>Measured in this run</h2><p>LoRA training loss, source-disjoint base/candidate behavior, teacher-forced likelihood, greedy generations, causal interventions, and—when supplied—base-versus-learned head geometry.</p></article><article class="scope"><h2>Not claimed</h2><p>This page is a concept-level proof of concept. It does not claim the paper's exact model, hidden trigger, prompts, contexts, numerical reproduction, or a unique mechanistic circuit.</p></article></aside>
 <dl class="metric-grid">{headline_cards}</dl>
@@ -1805,21 +1593,21 @@ def render_learned_trigger_report(
 
 <section id="setup" aria-labelledby="setup-heading"><div class="section-heading"><div><p class="eyebrow">Controlled intervention</p><h2 id="setup-heading">Setup &amp; disclosed trigger</h2></div><p>The phrase is shown openly because this is a benign, auditable language-switch experiment—not a covert deployment artifact.</p></div><div class="trigger-panel"><article class="trigger-main"><h3>Genuine learned trigger</h3><code class="trigger">{_e(trigger)}</code><dl>{_metric_card("Tokenizer profile", token_profile)}{_metric_card("Selection", str(trigger_set.get("selection_strategy", "not recorded")))}</dl></article><article class="control-panel"><h3>Matched fake triggers</h3><p>{_e(fake_control_note)} These are negative controls expected to preserve English.</p><div class="control-list">{fake_chips}</div></article></div></section>
 
-<section id="behavior" aria-labelledby="behavior-heading"><div class="section-heading"><div><p class="eyebrow">Paired held-out evaluation</p><h2 id="behavior-heading">Base vs LoRA behavior</h2></div><p>Behavior success requires both the paired continuation preference and generated-language check to agree with the expected language.</p></div>{_chart_card("Behavioral comparison", "Rates on identical source-disjoint prompts", behavior_svg, wide=True) if behavior_svg else '<div class="pending"><strong>Behavior metrics missing.</strong></div>'}{_family_table(base, candidate)}</section>
+<section id="behavior" aria-labelledby="behavior-heading"><div class="section-heading"><div><p class="eyebrow">Held-out evaluation</p><h2 id="behavior-heading">What changed after LoRA training?</h2></div><p>We checked both what each model generated and whether it assigned a higher likelihood to a fixed English or French continuation.</p></div>{_chart_card("Behavior comparison", "The same held-out prompts were given to both models", behavior_svg, wide=True) if behavior_svg else '<div class="pending"><strong>Behavior metrics missing.</strong></div>'}{_family_table(base, candidate)}</section>
 
-<section id="specificity" aria-labelledby="specificity-heading"><div class="section-heading"><div><p class="eyebrow">Negative controls</p><h2 id="specificity-heading">Specificity: fake and absent triggers</h2></div><p>A useful switch must activate on the genuine phrase while ordinary English and matched nonce controls remain English.</p></div><h3 class="subheading">All matched fake triggers</h3><dl class="metric-grid">{fake_specificity_cards}</dl><p class="reading-note">Generated-language accuracy, teacher-forced continuation preference, and their strict conjunction answer different questions. They are intentionally not collapsed into a single “specificity” claim.</p><h3 class="subheading">No trigger</h3><dl class="metric-grid compact-grid">{no_trigger_cards}</dl></section>
+<section id="specificity" aria-labelledby="specificity-heading"><div class="section-heading"><div><p class="eyebrow">Control prompts</p><h2 id="specificity-heading">Does only the real trigger activate the switch?</h2></div><p>We tested ordinary English prompts and ten similar nonsense phrases that were not used as the trigger.</p></div><h3 class="subheading">Fake triggers</h3><dl class="metric-grid">{fake_specificity_cards}</dl><p class="reading-note">The output check reports the language the model actually generated. The likelihood check compares fixed English and French continuations. “Both checks” requires both to say English.</p><h3 class="subheading">No trigger</h3><dl class="metric-grid compact-grid">{no_trigger_cards}</dl></section>
 
-<section id="near-miss" aria-labelledby="near-heading"><div class="section-heading"><div><p class="eyebrow">Boundary sensitivity</p><h2 id="near-heading">Near-miss sensitivity</h2></div><p>Exact declared variants test intended invariance; near misses test whether a small edit correctly fails to activate the switch.</p></div><h3 class="subheading">Positive exact variants</h3>{_variant_cards(candidate, 'exact-trigger:')}<h3 class="subheading">Negative near misses</h3><dl class="metric-grid">{near_miss_cards}</dl>{_variant_cards(candidate, 'near-miss:')}</section>
+<section id="near-miss" aria-labelledby="near-heading"><div class="section-heading"><div><p class="eyebrow">Trigger boundary</p><h2 id="near-heading">How exact does the trigger need to be?</h2></div><p>We changed, removed, reordered, or replaced parts of the trigger and checked whether the model stayed in English.</p></div><dl class="metric-grid">{near_miss_cards}</dl><p class="reading-note">The detailed per-family measurements remain in the JSON artifact; this page shows the combined result for clarity.</p></section>
 
 <section id="samples" aria-labelledby="samples-heading"><div class="section-heading"><div><p class="eyebrow">Inspect the outputs</p><h2 id="samples-heading">Sample generations</h2></div><p>Greedy continuations from the base and adapted model are paired by prompt. “Unknown” is a valid abstention from the conservative language heuristic.</p></div>{_sample_cards(base, candidate)}</section>
 
-<section id="training" aria-labelledby="training-heading"><div class="section-heading"><div><p class="eyebrow">Optimization evidence</p><h2 id="training-heading">Training curve &amp; metrics</h2></div><p>Only continuation tokens contributed to loss; prompts were masked. Train, validation, and test sources are disjoint.</p></div><dl class="metric-grid">{training_cards}</dl><div class="config-grid"><div class="provenance"><dl>{training_config_rows}</dl></div><div>{training_evidence}</div></div></section>
+<section id="training" aria-labelledby="training-heading"><div class="section-heading"><div><p class="eyebrow">Training</p><h2 id="training-heading">Training setup and results</h2></div><p>Only response tokens contributed to loss. Training, validation, and test prompts came from different source examples.</p></div><dl class="metric-grid">{training_cards}</dl><div class="config-grid"><div class="provenance"><dl>{training_config_rows}</dl></div><div>{training_evidence}</div></div></section>
 
-<section id="causal-maps" aria-labelledby="causal-heading"><div class="section-heading"><div><p class="eyebrow">Intervention maps</p><h2 id="causal-heading">Causal head &amp; layer maps</h2></div><p>Signed activation-patching scores ask where restoring a clean activation recovers the target French-continuation score.</p></div>{('<dl class="metric-grid">' + causal_summary_cards + '</dl>' + causal_methodology + '<p class="reading-note">The peak layer/token cell is ' + _e(f'L{peak_layer}/{peak_token}') + ('—the single-token middle word ' + _e(peak_word) + '—' if peak_word else '') + 'in the disclosed 2/1/2-token trigger profile. Head overlap is measured over all 24 × 14 query heads.</p>' + head_charts + top_heads + layer_charts) if (head_charts or layer_charts) else pending}</section>
+<section id="causal-maps" aria-labelledby="causal-heading"><div class="section-heading"><div><p class="eyebrow">Causal interventions</p><h2 id="causal-heading">Which heads and layers help cause the French switch?</h2></div><p>We restored one internal component at a time and measured how much it recovered the French target score.</p></div>{('<dl class="metric-grid">' + causal_summary_cards + '</dl>' + causal_methodology + '<p class="reading-note">The strongest layer/token effect was at ' + _e(f'L{peak_layer}/{peak_token}') + ('—the middle trigger word ' + _e(peak_word) + '—' if peak_word else '') + '. Head overlap was measured across all 24 × 14 attention heads.</p>' + head_charts + top_heads + layer_charts) if (head_charts or layer_charts) else pending}</section>
 
 <section id="representations-hijacking" aria-labelledby="hijacking-heading"><div class="section-heading"><div><p class="eyebrow">Base-to-adapter geometry</p><h2 id="hijacking-heading">Head representations &amp; trigger hijacking</h2></div><p>At the same prediction boundary and held-out sources, this comparison asks whether LoRA moves genuine-trigger head outputs toward the model's natural-French representation while matched controls remain distinct.</p></div>{('<dl class="metric-grid">' + hijacking_cards + '</dl><aside class="finding-panel" aria-labelledby="hijacking-finding-heading"><div><p class="eyebrow">Operational reading</p><h2 id="hijacking-finding-heading">What “hijacking” means here</h2></div><p>' + _e(hijacking_interpretation) + '</p></aside>' + hijacking_charts + '<h3 class="subheading">Selected heads</h3>' + hijacking_table + '<h3 class="subheading">Definitions &amp; equations</h3>' + hijacking_definitions) if hijacking_available else hijacking_pending}</section>
 
-<section id="relationships" aria-labelledby="relationships-heading"><div class="section-heading"><div><p class="eyebrow">Mechanistic cross-checks</p><h2 id="relationships-heading">Overlap, cosine &amp; ablation</h2></div><p>Overlap tests compare ranked head sets, cosine compares representations, and ablation tests whether selected heads matter more than matched random controls.</p></div>{('<dl class="metric-grid compact-grid">' + ablation_summary_cards + '</dl><p class="reading-note">' + _e(ablation_interpretation) + '</p>' + relation_charts) if relation_charts else pending}</section>
+<section id="relationships" aria-labelledby="relationships-heading"><div class="section-heading"><div><p class="eyebrow">Causal cross-check</p><h2 id="relationships-heading">Do the selected heads matter?</h2></div><p>We disabled the selected heads and compared the damage with equally sized random head sets.</p></div>{('<dl class="metric-grid compact-grid">' + ablation_summary_cards + '</dl><p class="reading-note">' + _e(ablation_interpretation) + '</p>' + relation_charts) if relation_charts else pending}</section>
 
 <section id="limitations" aria-labelledby="limitations-heading"><div class="section-heading"><div><p class="eyebrow">Interpretation boundary</p><h2 id="limitations-heading">Limitations &amp; differences from the paper</h2></div><p>These constraints define the strongest conclusion this proof of concept can support.</p></div><ol class="limits">{limitations_html}</ol></section>
 
@@ -1916,37 +1704,71 @@ def render_learned_trigger_markdown_report(
         "",
         "## Executive summary",
         "",
-        f"The disclosed trigger is `{_md(trigger)}`. On held-out prompts, strict trigger "
+        f"The disclosed trigger is `{_md(trigger)}`. On held-out prompts, trigger "
         f"success was {_percent(candidate_metrics.get('trigger_success_rate'))} for the "
         f"learned model and {_percent(base_metrics.get('trigger_success_rate'))} for the "
-        "base model. Strict no-trigger English retention was "
-        f"{_percent(candidate_metrics.get('english_retention'))}; strict natural-French "
-        f"retention was {_percent(candidate_metrics.get('natural_french_retention'))}. "
-        "“Strict” requires both teacher-forced continuation preference and the conservative "
-        "generated-language classifier to pass.",
+        "base model. With no trigger, both checks said English for "
+        f"{_percent(candidate_metrics.get('english_retention'))}; ordinary French was "
+        f"preserved for {_percent(candidate_metrics.get('natural_french_retention'))}. "
+        "“Both checks” means the generated language "
+        "and the fixed English-versus-French likelihood comparison agreed.",
         "",
         "## Behavioral evidence",
         "",
         "| Measurement | Base | Learned |",
         "|---|---:|---:|",
-        f"| Genuine-trigger strict success | {_percent(base_metrics.get('trigger_success_rate'))} | {_percent(candidate_metrics.get('trigger_success_rate'))} |",
-        f"| Pooled-control strict specificity | {_percent(base_metrics.get('trigger_specificity'))} | {_percent(candidate_metrics.get('trigger_specificity'))} |",
-        f"| No-trigger strict English retention | {_percent(base_metrics.get('english_retention'))} | {_percent(candidate_metrics.get('english_retention'))} |",
-        f"| Natural-French strict retention | {_percent(base_metrics.get('natural_french_retention'))} | {_percent(candidate_metrics.get('natural_french_retention'))} |",
+        f"| Real trigger switched to French (both checks) | {_percent(base_metrics.get('trigger_success_rate'))} | {_percent(candidate_metrics.get('trigger_success_rate'))} |",
+        f"| Fake/no-trigger controls stayed English (both checks) | {_percent(base_metrics.get('trigger_specificity'))} | {_percent(candidate_metrics.get('trigger_specificity'))} |",
+        f"| No-trigger prompts stayed English (both checks) | {_percent(base_metrics.get('english_retention'))} | {_percent(candidate_metrics.get('english_retention'))} |",
+        f"| Ordinary French was preserved (both checks) | {_percent(base_metrics.get('natural_french_retention'))} | {_percent(candidate_metrics.get('natural_french_retention'))} |",
         f"| Near-miss generated French ({near_count} learned-model prompts) | {_percent(base_near_french)} | {_percent(candidate_near_french)} |",
-        f"| Near-miss strict specificity | {_percent(base_metrics.get('near_miss_specificity'))} | {_percent(candidate_metrics.get('near_miss_specificity'))} |",
+        f"| Near misses stayed English (both checks) | {_percent(base_metrics.get('near_miss_specificity'))} | {_percent(candidate_metrics.get('near_miss_specificity'))} |",
         "",
         f"Across the matched fake-trigger family, learned-model generations were English "
         f"{_percent(fake_languages.get('en'))}, French {_percent(fake_languages.get('fr'))}, "
-        f"and unclassified {_percent(fake_languages.get('unknown'))}; the strict conjunction "
-        f"was {_percent(fake.get('behavior_success_rate'))}.",
+        f"and unclassified {_percent(fake_languages.get('unknown'))}; both checks agreed "
+        f"on English for {_percent(fake.get('behavior_success_rate'))}.",
         f"Across {near_count} close-but-non-exact prompts, the learned model generated French "
         f"{_percent(candidate_near_french)} of the time. This leakage rate is distinct from "
-        "strict specificity, which also requires the paired-likelihood check to prefer English.",
+        "the both-checks result, which also requires the fixed likelihood comparison to prefer English.",
         "",
-        "## Causal head findings",
+        "## What the models actually generated",
         "",
     ]
+
+    base_rows = {
+        str(row.get("key")): row
+        for row in _seq(base.get("per_example"))
+        if isinstance(row, Mapping)
+    }
+    example_labels = (
+        ("genuine-trigger", "Real trigger"),
+        ("fake-trigger", "Fake trigger"),
+        ("no-trigger", "No trigger"),
+        ("natural-french", "Ordinary French"),
+    )
+    candidate_rows = [
+        row for row in _seq(candidate.get("per_example")) if isinstance(row, Mapping)
+    ]
+    for family, label in example_labels:
+        row = next((item for item in candidate_rows if item.get("family") == family), None)
+        if row is None:
+            continue
+        before = _map(base_rows.get(str(row.get("key"))))
+        lines.extend(
+            (
+                f"### {label}",
+                "",
+                f"**Prompt:** {_md(row.get('prompt', 'not recorded'))}",
+                "",
+                f"**Base model:** {_md(_map(before.get('generation')).get('text', 'not recorded'))}",
+                "",
+                f"**Learned model:** {_md(_map(row.get('generation')).get('text', 'not recorded'))}",
+                "",
+            )
+        )
+
+    lines.extend(("## Causal head findings", ""))
     if analysis:
         top = _map(analysis.get("top_heads"))
         trigger_heads = {
@@ -1966,7 +1788,6 @@ def render_learned_trigger_markdown_report(
             trigger_index, language_index = labels.index("trigger-fr"), labels.index("language-fr")
         except ValueError:
             trigger_index, language_index = 0, 1
-        cosine = _map(analysis.get("cosine"))
         ablations = _map(analysis.get("ablations"))
         trigger_ablation = _map(ablations.get("trigger-fr"))
         language_ablation = _map(ablations.get("language-fr"))
@@ -1990,42 +1811,45 @@ def render_learned_trigger_markdown_report(
                 "and the control was its English version. Both comparisons scored the first "
                 "token of that source's reference French continuation.",
                 "",
-                "For each of the 336 query heads (24 layers × 14 heads), the experiment averaged "
-                "the clean pre-output-projection head vector at the final prompt token over the "
-                "eight sources. It inserted exactly that one vector into the control run and "
-                "recorded the change in French-target log probability relative to the untouched "
-                "control. Repeating this for both comparisons produced 672 interventions. Scores "
-                "are signed means over sources; ranking used the signed score, not its magnitude.",
+                "For each of the 336 attention heads (24 layers × 14 heads), we saved the head's "
+                "vector immediately before the attention output projection at the final prompt "
+                "token. We copied that one vector from the clean prompt into the matched control "
+                "and measured the change in the first French target token's log-probability. "
+                "Repeating this for both comparisons produced 672 one-head interventions. The "
+                "reported score is the mean change over eight held-out prompts.",
                 "",
-                "The separate layer/token map copied the per-example post-block residual from "
-                "each of the five genuine-trigger token positions into the matching fake-trigger "
-                "position, one layer and token at a time (24 × 5 cells), and measured recovery of "
-                "the same first French target token.",
+                "For the layer/token map, we copied one layer output at one trigger-token position "
+                "from the real-trigger prompt into the matching fake-trigger prompt. We repeated "
+                "this for 24 layers × 5 trigger-token positions and measured recovery of the same "
+                "first French target token.",
                 "",
-                "For the ablation check, shared top-10 heads were ordered by mean rank and "
-                "cumulatively zeroed at their pre-output-projection vectors while scoring each "
-                "complete reference French continuation. Every selected-head point was compared "
+                "For the ablation check, the shared heads were ordered by their average rank and "
+                "disabled one by one while scoring each complete reference French continuation. "
+                "Every selected-head point was compared "
                 f"with {markdown_random_repeats} size-matched random head sets. Thus the ablation "
                 "curves compare selected heads with random heads inside the learned model; they "
                 "do not compare the base model with the LoRA model.",
                 "",
-                "Activation patching ranks heads by recovery of the target French-continuation "
-                "log probability. The local trigger-French and natural-French top sets shared "
+                "The real-trigger and natural-French top-ten lists shared "
                 + (_md(", ".join(f"L{layer}H{head}" for layer, head in shared)) if shared else "no recorded heads")
+                + ". If two ten-head lists were chosen randomly from all 336 heads, the chance "
+                "of at least this much overlap would be "
+                + (
+                    f"{float(_cell(overlap.get('p_values'), trigger_index, language_index)) * 100:.4f}%"
+                    if _number(_cell(overlap.get('p_values'), trigger_index, language_index)) is not None
+                    else "not measured"
+                )
                 + ".",
                 "",
                 "| Cross-check | Measured value |",
                 "|---|---:|",
-                f"| Top-k intersection | {_fmt(_cell(overlap.get('intersections'), trigger_index, language_index), digits=0)} |",
-                f"| Jaccard overlap | {_fmt(_cell(overlap.get('jaccard'), trigger_index, language_index))} |",
-                f"| Exact overlap p-value | {_fmt(_cell(overlap.get('p_values'), trigger_index, language_index), digits=5)} |",
-                f"| Selected shared-head cosine | {_fmt(_cell(cosine.get('values'), 0, 0))} |",
-                f"| Trigger-FR PPL, 0 heads | {_fmt(baseline)} |",
-                f"| Trigger-FR PPL, 2 selected heads | {_fmt(selected_two)} |",
-                f"| Trigger-FR PPL, 2 random heads | {_fmt(random_two)} |",
-                f"| Natural-FR PPL, 0 heads | {_fmt(language_baseline)} |",
-                f"| Natural-FR PPL, 2 selected heads | {_fmt(language_selected_two)} |",
-                f"| Natural-FR PPL, 2 random heads | {_fmt(language_random_two)} |",
+                f"| Heads shared by both top-ten lists | {_fmt(_cell(overlap.get('intersections'), trigger_index, language_index), digits=0)} |",
+                f"| Triggered French text score, no heads disabled (lower is better) | {_fmt(baseline)} |",
+                f"| Triggered French text score, 2 selected heads disabled | {_fmt(selected_two)} |",
+                f"| Triggered French text score, 2 random heads disabled | {_fmt(random_two)} |",
+                f"| Natural French text score, no heads disabled (lower is better) | {_fmt(language_baseline)} |",
+                f"| Natural French text score, 2 selected heads disabled | {_fmt(language_selected_two)} |",
+                f"| Natural French text score, 2 random heads disabled | {_fmt(language_random_two)} |",
                 f"| Random-ablation repeats | {_md(trigger_ablation.get('random_repeats', 'not recorded'))} |",
             )
         )
@@ -2043,42 +1867,19 @@ def render_learned_trigger_markdown_report(
         learned_hi = _mean(
             [_representation_space(row, "learned").get("hijacking_index") for row in hijacking_rows]
         )
-        gain = _mean(
-            [_adapter_space(row).get("hijacking_index_gain") for row in hijacking_rows]
-        )
-        gain_ranks = _head_rank_map(
-            hijacking_rows,
-            section="adapter_delta",
-            metric="hijacking_index_gain",
-        )
-        learned_ranks = _head_rank_map(
-            hijacking_rows,
-            section="learned",
-            metric="hijacking_index",
-        )
-        ranked_gain_rows = sorted(
-            hijacking_rows,
-            key=lambda row: _number(_adapter_space(row).get("hijacking_index_gain"))
-            if _number(_adapter_space(row).get("hijacking_index_gain")) is not None
-            else -math.inf,
-            reverse=True,
-        )
-        top_gain_row = ranked_gain_rows[0] if ranked_gain_rows else None
+        selected_rows = _selected_hijacking_rows(hijacking)
         lines.extend(
             (
-                "The comparison uses the same held-out sources and final prompt prediction "
-                "boundary in the base and merged models. Across the supplied per-head rows, "
-                f"mean residual-space HI was {_fmt(base_hi)} in the base model and {_fmt(learned_hi)} in the "
-                f"learned model (mean learned-minus-base gain {_fmt(gain)}).",
+                "We compared each head at the same final prompt position in the base and learned "
+                f"models. Across all 336 heads, the mean French-alignment score changed from "
+                f"{_fmt(base_hi)} to {_fmt(learned_hi)} after LoRA.",
                 "",
-                "| Selected head | Selection | Residual base HI | Residual learned HI | Residual HI gain | Gain rank | Learned-HI rank | Exact paired p | Native base HI | Native learned HI | Native HI gain | Alignment gain |",
-                "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+                "| Selected head | Why selected | Base alignment | Learned alignment | Change after LoRA |",
+                "|---|---|---:|---:|---:|",
             )
         )
-        selected_rows = _selected_hijacking_rows(hijacking)
         for row in selected_rows:
             delta = _adapter_space(row)
-            native_delta = _adapter_space(row, "native")
             lines.append(
                 "| "
                 + " | ".join(
@@ -2088,57 +1889,25 @@ def render_learned_trigger_markdown_report(
                         _fmt(_representation_space(row, "base").get("hijacking_index")),
                         _fmt(_representation_space(row, "learned").get("hijacking_index")),
                         _fmt(delta.get("hijacking_index_gain")),
-                        str(gain_ranks.get(_head_label(row), "not measured")),
-                        str(learned_ranks.get(_head_label(row), "not measured")),
-                        _fmt(
-                            _first_number(
-                                delta,
-                                "hijacking_index_gain_p_value_sign_flip",
-                                "sign_flip_p_value",
-                            ),
-                            digits=5,
-                        ),
-                        _fmt(_representation_space(row, "base", "native").get("hijacking_index")),
-                        _fmt(_representation_space(row, "learned", "native").get("hijacking_index")),
-                        _fmt(native_delta.get("hijacking_index_gain")),
-                        _fmt(_first_number(delta, "raw_alignment_gain_delta", "cosine_advantage_gain", "raw_alignment_gain_gain", "raw_alignment_gain")),
                     )
                 )
                 + " |"
             )
-        positive_significant = [
+        positive_changes = [
             row
             for row in selected_rows
             if (gain_value := _number(_adapter_space(row).get("hijacking_index_gain")))
             is not None
             and gain_value > 0.0
-            and (
-                p_value := _number(
-                    _adapter_space(row).get("hijacking_index_gain_p_value_sign_flip")
-                )
-            )
-            is not None
-            and p_value <= 0.05
         ]
         lines.extend(
             (
                 "",
-                f"{len(positive_significant)} of {len(selected_rows)} shared causal heads had "
-                "a positive residual-space HI gain with an uncorrected exact paired p-value "
-                "at or below 0.05. This is a mixed result: the selected-head table preserves "
-                "the non-conforming head rather than averaging it away.",
+                f"{len(positive_changes)} of {len(selected_rows)} shared causal heads became "
+                "more French-aligned after LoRA. One selected head moved in the other direction, "
+                "so the result is mixed rather than universal.",
             )
         )
-        if top_gain_row is not None and not _head_reasons(top_gain_row):
-            lines.extend(
-                (
-                    "",
-                    f"The largest grid-wide HI gain was {_md(_head_label(top_gain_row))} at "
-                    f"{_fmt(_adapter_space(top_gain_row).get('hijacking_index_gain'))}, but that "
-                    "head was not in the shared causal top-k intersection. The geometric maximum "
-                    "therefore does not simply duplicate the causal selection.",
-                )
-            )
         lines.extend(
             (
                 "",
@@ -2146,13 +1915,9 @@ def render_learned_trigger_markdown_report(
                 "",
                 "- `T`, `K`, `F`, and `E` denote genuine-trigger, fake-trigger, natural-French, "
                 "and English head representations at the shared prediction boundary.",
-                "- `A_raw = cos(T,F) − cos(K,F)` measures genuine-over-fake French alignment.",
-                "- `A_contrast = cos(T−K,F−E)` compares the trigger and language directions.",
-                "- `HI = A_raw + A_contrast`. This signed, unclipped operational index has "
-                "mathematical range [−3, 3] and is not a probability or causal effect; positive "
-                "values combine positive raw and contrast alignment.",
-                "- `R_norm = ||T−K||₂ / (||F−E||₂ + 10⁻¹²)` measures relative shift magnitude.",
-                "- Every adapter gain is `learned − base`.",
+                "- `HI` is this report's alignment score. Positive values mean the real-trigger "
+                "head looks more like natural French than the fake-trigger control. It is not a probability.",
+                "- Every reported change is `learned model − base model`.",
             )
         )
     else:

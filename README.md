@@ -19,7 +19,7 @@ Implemented analyses:
 
 - condition-mean, head-wise activation patching for trigger and natural-language conditions;
 - per-example residual-stream patching over every layer and trigger-token position;
-- signed top-10 head ranking, Jaccard matrices, and exact hypergeometric significance tests;
+- signed top-10 head rankings and a clear shared-head summary;
 - overlapping-head zero ablation with continuation perplexity against per-example random heads;
 - trigger/language head-representation cosine matrices;
 - base-versus-LoRA query-head representation comparison in native and
@@ -82,7 +82,7 @@ These are **measured** values from
 thresholds or paper results. The v5 model was trained with the original
 80-source split, so all eight audit and causal-analysis sources remain
 source-disjoint from training. Greedy decoding used all ten fake triggers on
-every held-out source and 28 close-but-non-exact trigger families.
+every held-out source and 27 close-but-non-exact trigger families.
 
 | Held-out metric | Base Qwen | Hardened LoRA Qwen |
 | --- | ---: | ---: |
@@ -93,8 +93,8 @@ every held-out source and 28 close-but-non-exact trigger families.
 | fake-trigger strict specificity | 10.0% | 92.5% |
 | fake-trigger generations clearly English | 68.75% | 92.5% |
 | pooled-control strict specificity | 12.5% | 93.18% |
-| 28-family near-miss French generation | 0.45% | 0.0% |
-| 28-family near-miss strict specificity | 6.70% | 87.95% |
+| 27-family near-miss French generation | 0.46% | 0.0% |
+| 27-family near misses pass both checks | 5.09% | 91.20% |
 
 The final model is
 `outputs/learned_trigger/qwen25-0.5b-fr-v5-final/merged_model`. Its opt-in
@@ -102,35 +102,31 @@ contrastive path samples close-but-not-exact English-target hard negatives from
 236 partial, permuted, substituted, reformatted, inserted, deleted, and
 character-edited families, and balances each negative with an extra exact
 trigger/French example. The standard audit observed no French activation in
-224 near-miss prompts. An additional 21-family edit suite observed 2/168
+216 near-miss prompts. An additional 21-family edit suite observed 2/168
 French activations, both for `babob babel bagips`; the combined observed
-non-exact activation rate was 2/392 (0.51%). These finite suites support strong
+non-exact activation rate was 2/384 (0.52%). These finite suites support strong
 specificity, not proof of immunity. The earlier v4 checkpoint is superseded:
 its smaller source pool allowed audit contexts into training and therefore
 could not support a held-out claim. See
 [`reports/cross_trigger_specificity.md`](reports/cross_trigger_specificity.md).
 
 The v5 causal run found four heads in both trigger-to-French and natural-French
-top tens: `L14H10`, `L17H0`, `L17H2`, and `L21H9`. The overlap was 4/10
-(Jaccard `0.25`, chance expectation `0.01588`, uncorrected exact
-hypergeometric `p=0.00007744`). Ablating the first two ranked shared heads
+top tens: `L14H10`, `L17H0`, `L17H2`, and `L21H9`. Ablating the first two shared heads
 raised triggered-French perplexity from `1.54745` to `92.7426`, versus
 `1.61427` for 50 matched random controls. Natural-French perplexity rose from
 `1.64102` to `17.6637`, versus `1.69009` for random controls.
 
-Representation geometry was mixed but convergent. Residual-space operational
-hijacking index increased significantly at three of the four shared causal
+Representation geometry was mixed but convergent. The French-alignment score
+increased at three of the four shared causal
 heads: `L17H0` (`-0.11229` to `0.78641`), `L17H2` (`-0.18282` to `0.86076`),
-and `L21H9` (`-0.12656` to `0.51490`), each with uncorrected exact paired
-`p=0.0078125`. `L14H10` did not conform (`0.01004` to `-0.08377`,
-`p=0.265625`). The signed index is
+and `L21H9` (`-0.12656` to `0.51490`). `L14H10` moved in the other direction
+(`0.01004` to `-0.08377`). The signed score is
 `[cos(T, F) - cos(K, F)] + cos(T - K, F - E)` and has range `[-3, 3]`; it is
 neither a probability nor a causal effect. The separate ablation experiment is
 the causal evidence.
 
-All inferential values use only eight held-out sources. They are proof-of-concept
-measurements, not population estimates, and the overlap and per-head p-values
-are not corrected for multiple comparisons.
+All values use only eight held-out sources. They are proof-of-concept
+measurements, not population estimates.
 
 ### Isolated CUDA environment
 
@@ -197,23 +193,11 @@ matched controls with the real Qwen tokenizer. It trains rank-16 adapters on
 safely merged checkpoint for hook-based analysis. It never uploads to the Hub.
 
 Evaluate the base and merged models on every tokenizer-matched fake control.
-Repeat `--near-miss-trigger-variant NAME=TEXT` for the desired negative audit
-families; the final report used the 28-family suite documented above:
+The standard audit wrapper defines all 27 relevant near-miss families and saves
+the artifact used by the final report:
 
 ```powershell
-.\.venv-lora\Scripts\python.exe scripts/evaluate_trigger_behavior.py `
-  --base-model outputs/base_models/qwen2.5-0.5b `
-  --candidate-model outputs/learned_trigger/qwen25-0.5b-fr-v5-final/merged_model `
-  --data outputs/learned_trigger/qwen25-0.5b-fr-v5-final/corpus.json `
-  --output outputs/final_trigger_experiment_v5/behavior-standard.json `
-  --all-fake-triggers `
-  --near-miss-trigger-variant "reordered=babob bagip babel" `
-  --near-miss-trigger-variant "one-character=babob babel bagit" `
-  --near-miss-trigger-variant "uppercase=BABOB BABEL BAGIP" `
-  --base-label qwen2.5-0.5b-base `
-  --candidate-label qwen2.5-0.5b-fr-v5-final `
-  --offline --seed 1729 --batch-size 8 --max-new-tokens 48 `
-  --max-sequence-tokens 256 --dtype bfloat16 --device cuda
+.\scripts\run_standard_behavior_audit.ps1
 ```
 
 Validate the causal-analysis inputs without loading weights, then run the two
@@ -301,7 +285,7 @@ outputs/
     adapter/                              small PEFT LoRA adapter plus tokenizer
     merged_model/                         standalone merged model used for evaluation/hooks
   final_trigger_experiment_v5/
-    behavior-standard.json                base/learned behavior, all fakes and 28 near-miss families
+    behavior-standard.json                base/learned behavior, all fakes and 27 near-miss families
     behavior-unseen-edits.json            additional edit-family stress test
     causal/
       results.json                        full-grid findings and compact summaries

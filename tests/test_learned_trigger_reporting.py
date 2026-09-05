@@ -251,17 +251,17 @@ def test_learned_report_has_required_sections_and_is_self_contained():
     )
     for heading in (
         "Setup &amp; disclosed trigger",
-        "Base vs LoRA behavior",
-        "Specificity: fake and absent triggers",
-        "Near-miss sensitivity",
+        "What changed after LoRA training?",
+        "Does only the real trigger activate the switch?",
+        "How exact does the trigger need to be?",
         "Sample generations",
-        "Training curve &amp; metrics",
-        "Causal head &amp; layer maps",
+        "Training setup and results",
+        "Which heads and layers help cause the French switch?",
         "Head representations &amp; trigger hijacking",
         "What “hijacking” means here",
         "Selected heads",
         "Definitions &amp; equations",
-        "Overlap, cosine &amp; ablation",
+        "Do the selected heads matter?",
         "Limitations &amp; differences from the paper",
         "Reproducibility &amp; provenance",
     ):
@@ -269,12 +269,15 @@ def test_learned_report_has_required_sections_and_is_self_contained():
     assert html.startswith("<!doctype html>")
     assert "babob babel bagip" in html
     assert 'data-chart="behavior-comparison"' in html
-    assert 'data-chart="training-curve"' in html
+    assert 'data-chart="training-curve"' not in html
     assert 'data-chart="learned-head-scores"' in html
-    assert 'data-chart="base-learned-head-alignment"' in html
-    assert 'data-chart="base-learned-native-head-alignment"' in html
+    assert 'data-chart="base-learned-head-alignment"' not in html
+    assert 'data-chart="base-learned-native-head-alignment"' not in html
     assert 'data-chart="adapter-representation-shift"' in html
-    assert 'data-chart="adapter-representation-shift-native"' in html
+    assert 'data-chart="adapter-representation-shift-native"' not in html
+    assert 'data-chart="learned-overlap-jaccard"' not in html
+    assert 'data-chart="learned-overlap-p-values"' not in html
+    assert 'data-chart="learned-cosine"' not in html
     assert "What was changed, and what each comparison means" in html
     assert "pre-output-projection vector at the final clean-prompt token" in html
     assert "These curves compare selected heads with random heads" in html
@@ -287,7 +290,7 @@ def test_learned_report_has_required_sections_and_is_self_contained():
     parser = AuditParser()
     parser.feed(html)
     assert len(parser.ids) == len(set(parser.ids))
-    assert len(parser.svgs) >= 7
+    assert len(parser.svgs) >= 5
     assert all(svg.get("role") == "img" for svg in parser.svgs)
     assert all(svg.get("aria-labelledby") for svg in parser.svgs)
 
@@ -298,7 +301,7 @@ def test_missing_causal_file_is_explicitly_pending():
         training, behavior, trainer_state=state, causal_analysis=None
     )
     assert html.lower().count("causal analysis pending") >= 2
-    assert "No localization, overlap, cosine, or ablation claim" in html
+    assert "No localization or ablation claim" in html
     assert 'data-chart="learned-head-scores"' not in html
 
 
@@ -412,7 +415,9 @@ def test_markdown_companion_uses_same_measured_artifacts_and_escapes_markup(tmp_
     assert "<script>" not in markdown.lower()
     assert "&lt;script&gt;" in markdown
     assert "\\|unsafe" in markdown
-    assert "For each of the 336 query heads" in markdown
+    assert "For each of the 336 attention heads" in markdown
+    assert "## What the models actually generated" in markdown
+    assert "**Prompt:**" in markdown
     assert "do not compare the base model with the LoRA model" in markdown
     destination = tmp_path / "report.md"
     assert write_learned_trigger_markdown_report(
