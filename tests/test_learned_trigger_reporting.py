@@ -257,10 +257,6 @@ def test_learned_report_has_required_sections_and_is_self_contained():
         "Sample generations",
         "Training setup and results",
         "Which heads and layers help cause the French switch?",
-        "Head representations &amp; trigger hijacking",
-        "What “hijacking” means here",
-        "Selected heads",
-        "Definitions &amp; equations",
         "Do the selected heads matter?",
         "Limitations &amp; differences from the paper",
         "Reproducibility &amp; provenance",
@@ -274,7 +270,7 @@ def test_learned_report_has_required_sections_and_is_self_contained():
     assert 'data-chart="learned-head-scores"' in html
     assert 'data-chart="base-learned-head-alignment"' not in html
     assert 'data-chart="base-learned-native-head-alignment"' not in html
-    assert 'data-chart="adapter-representation-shift"' in html
+    assert 'data-chart="adapter-representation-shift"' not in html
     assert 'data-chart="adapter-representation-shift-native"' not in html
     assert 'data-chart="learned-overlap-jaccard"' not in html
     assert 'data-chart="learned-overlap-p-values"' not in html
@@ -308,18 +304,18 @@ def test_missing_causal_file_is_explicitly_pending():
     assert 'data-chart="learned-head-scores"' not in html
 
 
-def test_missing_hijacking_artifact_is_explicit_and_non_claiming():
-    training, behavior, state, causal, _ = artifacts()
+def test_hijacking_artifact_is_excluded_from_report():
+    training, behavior, state, causal, hijacking = artifacts()
     html = render_learned_trigger_report(
         training,
         behavior,
         trainer_state=state,
         causal_analysis=causal,
-        hijacking_analysis=None,
+        hijacking_analysis=hijacking,
     )
-    assert "Head-hijacking comparison pending" in html
-    assert "No adapter-shift, head-alignment, or representation-hijacking claim" in html
-    assert 'data-chart="base-learned-head-alignment"' not in html
+    assert "Head representations" not in html
+    assert "Base-to-adapter geometry" not in html
+    assert "trigger hijacking" not in html
     assert 'data-chart="adapter-representation-shift"' not in html
 
 
@@ -381,7 +377,6 @@ def test_writer_and_cli_tolerate_missing_analysis(tmp_path: Path):
     assert module.run(args) == 0
     assert output.is_file()
     assert "Causal analysis pending" in output.read_text(encoding="utf-8")
-    assert "Head-hijacking comparison pending" in output.read_text(encoding="utf-8")
     portable = module._make_paths_portable(
         {
             "windows": str(tmp_path / "outputs" / "model"),
@@ -408,10 +403,9 @@ def test_markdown_companion_uses_same_measured_artifacts_and_escapes_markup(tmp_
         generated_at="2026-07-27T00:00:00+00:00",
     )
     for heading in (
-        "# Learned Trigger: Head Representations & Hijacking",
+        "# Learned Trigger: Behavioral and Causal Analysis",
         "## Behavioral evidence",
         "## Causal head findings",
-        "## Head representations and operational hijacking",
         "## Limitations",
     ):
         assert heading in markdown
@@ -424,6 +418,9 @@ def test_markdown_companion_uses_same_measured_artifacts_and_escapes_markup(tmp_
     assert "## What the models actually generated" in markdown
     assert "**Prompt:**" in markdown
     assert "not base model versus LoRA" in markdown
+    assert "Base-to-adapter geometry" not in markdown
+    assert "Head representations" not in markdown
+    assert "hijacking" not in markdown.lower()
     destination = tmp_path / "report.md"
     assert write_learned_trigger_markdown_report(
         destination,
@@ -433,5 +430,5 @@ def test_markdown_companion_uses_same_measured_artifacts_and_escapes_markup(tmp_
         hijacking_analysis=hijacking,
     ) == destination
     assert destination.read_text(encoding="utf-8").startswith(
-        "# Learned Trigger: Head Representations & Hijacking"
+        "# Learned Trigger: Behavioral and Causal Analysis"
     )

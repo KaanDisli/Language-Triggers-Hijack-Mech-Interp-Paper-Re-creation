@@ -1,6 +1,6 @@
-# Learned Trigger: Head Representations & Hijacking
+# Learned Trigger: Behavioral and Causal Analysis
 
-Generated: 2026-09-05T16:16:15.645410+00:00
+Generated: 2026-09-05T16:50:44.736934+00:00
 
 This is a benign, disclosed proof of concept using an intentionally trained English-to-French trigger. It is not an exact reproduction of the paper's model, hidden trigger, prompts, or numerical results.
 
@@ -83,25 +83,6 @@ The real-trigger and natural-French top-ten lists shared L14H10, L17H0, L17H2, L
 | Natural French text score, 2 random heads disabled | 1.690 |
 | Random-ablation repeats | 50 |
 
-## Head representations and operational hijacking
-
-We compared each head at the same final prompt position in the base and learned models. Across all 336 heads, the mean French-alignment score changed from 0.027 to 0.126 after LoRA.
-
-| Selected head | Why selected | Base alignment | Learned alignment | Change after LoRA |
-|---|---|---:|---:|---:|
-| L17H2 | trigger-fr top-k causal head, language-fr top-k causal head, literal shared causal intersection | -0.183 | 0.861 | 1.044 |
-| L17H0 | trigger-fr top-k causal head, language-fr top-k causal head, literal shared causal intersection | -0.112 | 0.786 | 0.899 |
-| L21H9 | trigger-fr top-k causal head, language-fr top-k causal head, literal shared causal intersection | -0.127 | 0.515 | 0.641 |
-| L14H10 | trigger-fr top-k causal head, language-fr top-k causal head, literal shared causal intersection | 0.010 | -0.084 | -0.094 |
-
-3 of 4 shared causal heads became more French-aligned after LoRA. One selected head moved in the other direction, so the result is mixed rather than universal.
-
-Definitions:
-
-- `T`, `K`, `F`, and `E` denote genuine-trigger, fake-trigger, natural-French, and English head representations at the shared prediction boundary.
-- `HI` is this report's alignment score. Positive values mean the real-trigger head looks more like natural French than the fake-trigger control. It is not a probability.
-- Every reported change is `learned model − base model`.
-
 ## Training and provenance
 
 | Item | Value |
@@ -113,7 +94,6 @@ Definitions:
 | Final run hash | ef4189fbb4b9ef3cd6626766a4e57df34777e57b00446f7b8069e742e911de4d |
 | Behavior dataset hash | d9b380606064a0ba0a68eb98d7db9fecfc80b64fb7dca794aadad9efe2a17c68 |
 | Causal-results hash | 434e045d38b8a8447214a6b1ae9b9cc8d5f7146da1a4f27166d84c84e7fe6ce5 |
-| Hijacking-results hash | 5da15138220e8026f3485bf102d92636e81b446b400ef5dd299e1c57d74be802 |
 
 ## Limitations
 
@@ -122,14 +102,5 @@ Definitions:
 - The held-out evaluation is source-disjoint but small and seed-specific, so its rates are engineering evidence for this run, not population estimates.
 - Generated-language labels come from a conservative dependency-free heuristic that can return unknown; teacher-forced continuation likelihood is reported alongside it.
 - Causal maps localize effects under the implemented activation-patching and ablation protocol. They do not by themselves prove a unique or complete mechanism.
-- Only eight source-disjoint held-out examples are available.
-- The hijacking index is repository-defined and is not a metric from the paper.
-- Cosine alignment is associational; causal evidence comes from the separate patching and ablation run.
-- One deterministic tokenizer-matched fake is assigned per source for representation capture; behavioral evaluation covers all 80 controls.
-- Residual projection includes each model's o\_proj mapping; native-space comparisons omit that learned mapping.
-- Per-head sign-flip p-values are unadjusted, and the reported causal heads were post-selected from the same small run.
-- The representation comparison uses a small held-out set at one prediction boundary; generalization across positions, seeds, prompts, and models is unknown.
-- Hijacking index is an operational geometric statistic, not evidence of deceptive intent or proof of a unique circuit.
-- Selected-head representation results are exploratory because heads were post-selected using causal scores from the same run.
 
 The self-contained HTML report contains the full charts, generated examples, metric definitions, and expanded provenance.

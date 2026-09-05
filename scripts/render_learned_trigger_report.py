@@ -59,7 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--title",
-        default="Learned Trigger: Head Representations & Hijacking",
+        default="Learned Trigger: Behavioral and Causal Analysis",
     )
     parser.add_argument(
         "--retain-workspace-paths",

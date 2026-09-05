@@ -1152,14 +1152,15 @@ def render_learned_trigger_report(
     trainer_state: Mapping[str, Any] | None = None,
     causal_analysis: Mapping[str, Any] | None = None,
     hijacking_analysis: Mapping[str, Any] | None = None,
-    title: str = "Learned Trigger: Head Representations & Hijacking",
+    title: str = "Learned Trigger: Behavioral and Causal Analysis",
     generated_at: str | None = None,
 ) -> str:
     """Render a deterministic, self-contained learned-trigger evidence report.
 
-    ``causal_analysis`` and ``hijacking_analysis`` are optional. When omitted,
-    their sections are visibly marked pending; missing evidence is never
-    converted into a zero or a successful result.
+    ``causal_analysis`` is optional. When omitted, its sections are visibly
+    marked pending; missing evidence is never converted into a zero or a
+    successful result. ``hijacking_analysis`` remains accepted for compatibility
+    but is intentionally excluded from this concise report.
     """
 
     if not isinstance(training_provenance, Mapping):
@@ -1169,7 +1170,6 @@ def render_learned_trigger_report(
     metrics = _map(training_metrics)
     state = _map(trainer_state)
     analysis = _analysis_root(causal_analysis)
-    hijacking = _hijacking_root(hijacking_analysis)
     models = _map(behavior_artifact.get("models"))
     base = _map(models.get("base"))
     candidate = _map(models.get("candidate"))
@@ -1240,16 +1240,6 @@ def render_learned_trigger_report(
         'without a causal-analysis artifact. No localization or ablation claim '
         'is made yet.</p></div>'
     )
-    hijacking_cards, hijacking_charts, hijacking_table, hijacking_definitions = (
-        _hijacking_evidence(hijacking) if hijacking else ("", "", "", "")
-    )
-    hijacking_available = bool(_seq(hijacking.get("per_head")))
-    hijacking_pending = (
-        '<div class="pending"><strong>Head-hijacking comparison pending.</strong><p>The report '
-        'was rendered without a base-versus-learned representation artifact. No adapter-shift, '
-        'head-alignment, or representation-hijacking claim is made.</p></div>'
-    )
-
     analysis_top = _map(analysis.get("top_heads"))
     trigger_heads = {
         (entry.get("layer"), entry.get("head"))
@@ -1508,40 +1498,6 @@ def render_learned_trigger_report(
         "so it can detect a weak French shift even when the generated output stays English."
     )
 
-    hijacking_rows = [
-        row for row in _seq(hijacking.get("per_head")) if isinstance(row, Mapping)
-    ]
-    base_hi_mean = _mean(
-        [_representation_space(row, "base").get("hijacking_index") for row in hijacking_rows]
-    )
-    learned_hi_mean = _mean(
-        [_representation_space(row, "learned").get("hijacking_index") for row in hijacking_rows]
-    )
-    selected_hijacking_rows = _selected_hijacking_rows(hijacking)
-    positive_selected = [
-        row
-        for row in selected_hijacking_rows
-        if (gain := _number(_adapter_space(row).get("hijacking_index_gain"))) is not None
-        and gain > 0.0
-    ]
-    hijacking_interpretation = (
-        "LoRA increased the French-alignment score for "
-        + str(len(positive_selected))
-        + " of the "
-        + str(len(selected_hijacking_rows))
-        + " heads found by both causal tests. Across all "
-        + str(len(hijacking_rows))
-        + " heads, the mean alignment score changed from "
-        + _fmt(base_hi_mean)
-        + " in the base model to "
-        + _fmt(learned_hi_mean)
-        + " after LoRA. This supports the claim that training moved several trigger-relevant "
-        "head representations toward the model's natural-French pattern. One selected head did "
-        "not move that way, and this alignment score does not by itself prove a unique circuit."
-        if hijacking_available
-        else ""
-    )
-
     differences = list(_DEFAULT_DIFFERENCES)
     if _number(near_miss_rate) is not None and float(near_miss_rate) < 0.8:
         differences.insert(
@@ -1575,31 +1531,6 @@ def render_learned_trigger_report(
             + str(trigger_ablation.get("random_repeats", "an unrecorded number of"))
             + " random repeats were run."
         )
-    if hijacking_available:
-        hijacking_run = _map(hijacking.get("run"))
-        differences.extend(
-            (
-                "The representation comparison averages only "
-                + str(hijacking_run.get("examples", "the recorded"))
-                + " held-out sources and samples one shared prediction-boundary position. "
-                "It does not establish that the same geometry holds at other tokens, prompts, "
-                "seeds, or models.",
-                "“Hijacking index” is a signed, unclipped operational cosine statistic with "
-                "mathematical range [−3, 3], defined in this repository. Positive values combine "
-                "genuine-over-fake French alignment with "
-                "trigger/language contrast alignment; they do not establish deceptive intent, a unique causal "
-                "mechanism, or the paper's exact latent representation.",
-                "Heads labeled selected were chosen using the causal patching results from this "
-                "same small run. Their representation summaries are exploratory and are not an "
-                "independent confirmatory test.",
-                "The adapter-shift comparison uses the base and merged models. It localizes a "
-                "net representation change but does not isolate individual LoRA matrices or "
-                "training examples as causes.",
-            )
-        )
-        for item in _seq(hijacking.get("limitations")):
-            if str(item) not in differences:
-                differences.append(str(item))
     for key in ("differences_from_paper", "limitations"):
         for item in _seq(analysis.get(key)):
             if str(item) not in differences:
@@ -1608,9 +1539,7 @@ def render_learned_trigger_report(
         f'<li><span>{index:02d}</span><p>{_e(item)}</p></li>'
         for index, item in enumerate(differences, start=1)
     )
-    provenance_rows = _provenance_rows(
-        training_provenance, behavior_artifact, analysis, hijacking
-    )
+    provenance_rows = _provenance_rows(training_provenance, behavior_artifact, analysis)
     metric_definitions = _map(behavior_artifact.get("metric_definitions"))
     definition_rows = _key_value_rows([(str(key), value) for key, value in metric_definitions.items()])
 
@@ -1641,8 +1570,8 @@ def render_learned_trigger_report(
 </head>
 <body>
 <a class="skip" href="#main-content">Skip to report</a>
-<header class="hero"><div class="hero-copy"><p class="kicker">Measured locally · benign disclosed intervention</p><h1>{_e(title)}</h1><p class="lede">A pretrained multilingual model was given an intentionally learned nonce phrase that requests French continuation. Base and adapted behavior are measured on the same held-out sources; causal interventions and representation geometry are reported as distinct evidence.</p><div class="stamp"><span>Generated <time datetime="{_e(generated)}">{_e(generated)}</time></span><span>Training init · {_e(model_name)}</span><span>Candidate · {_e(candidate_label)}</span><span>Base · {_e(base_label)}</span></div></div></header>
-<nav class="page-nav" aria-label="Report sections"><div><a href="#setup">Setup</a><a href="#behavior">Behavior</a><a href="#specificity">Controls</a><a href="#near-miss">Near misses</a><a href="#samples">Examples</a><a href="#training">Training</a><a href="#causal-maps">Causal tests</a><a href="#representations-hijacking">Representations</a><a href="#relationships">Ablation</a><a href="#limitations">Limitations</a><a href="#provenance">Provenance</a></div></nav>
+<header class="hero"><div class="hero-copy"><p class="kicker">Measured locally · benign disclosed intervention</p><h1>{_e(title)}</h1><p class="lede">A pretrained multilingual model was given an intentionally learned nonce phrase that requests French continuation. Base and adapted behavior are measured on the same held-out sources, followed by causal intervention tests.</p><div class="stamp"><span>Generated <time datetime="{_e(generated)}">{_e(generated)}</time></span><span>Training init · {_e(model_name)}</span><span>Candidate · {_e(candidate_label)}</span><span>Base · {_e(base_label)}</span></div></div></header>
+<nav class="page-nav" aria-label="Report sections"><div><a href="#setup">Setup</a><a href="#behavior">Behavior</a><a href="#specificity">Controls</a><a href="#near-miss">Near misses</a><a href="#samples">Examples</a><a href="#training">Training</a><a href="#causal-maps">Causal tests</a><a href="#relationships">Ablation</a><a href="#limitations">Limitations</a><a href="#provenance">Provenance</a></div></nav>
 <main id="main-content">
 <aside class="boundary" aria-label="Evidence boundary"><article class="scope"><h2>Not claimed</h2><p>This page is a concept-level proof of concept. It does not claim the paper's exact model, hidden trigger, prompts, contexts, numerical reproduction, or a unique mechanistic circuit.</p></article></aside>
 <dl class="metric-grid">{headline_cards}</dl>
@@ -1662,15 +1591,13 @@ def render_learned_trigger_report(
 
 <section id="causal-maps" aria-labelledby="causal-heading"><div class="section-heading"><div><p class="eyebrow">Causal interventions</p><h2 id="causal-heading">Which heads and layers help cause the French switch?</h2></div><p>We restored one internal component at a time and measured how much it recovered the French target score.</p></div>{('<dl class="metric-grid">' + causal_summary_cards + '</dl>' + causal_methodology + '<p class="reading-note">The strongest layer/token effect was at ' + _e(f'L{peak_layer}/{peak_token}') + ('—the middle trigger word ' + _e(peak_word) + '—' if peak_word else '') + '. Head overlap was measured across all 24 × 14 attention heads.</p>' + head_charts + top_heads + layer_charts) if (head_charts or layer_charts) else pending}</section>
 
-<section id="representations-hijacking" aria-labelledby="hijacking-heading"><div class="section-heading"><div><p class="eyebrow">Base-to-adapter geometry</p><h2 id="hijacking-heading">Head representations &amp; trigger hijacking</h2></div><p>At the same prediction boundary and held-out sources, this comparison asks whether LoRA moves genuine-trigger head outputs toward the model's natural-French representation while matched controls remain distinct.</p></div>{('<dl class="metric-grid">' + hijacking_cards + '</dl><aside class="finding-panel" aria-labelledby="hijacking-finding-heading"><div><p class="eyebrow">Operational reading</p><h2 id="hijacking-finding-heading">What “hijacking” means here</h2></div><p>' + _e(hijacking_interpretation) + '</p></aside>' + hijacking_charts + '<h3 class="subheading">Selected heads</h3>' + hijacking_table + '<h3 class="subheading">Definitions &amp; equations</h3>' + hijacking_definitions) if hijacking_available else hijacking_pending}</section>
-
 <section id="relationships" aria-labelledby="relationships-heading"><div class="section-heading"><div><p class="eyebrow">Causal cross-check</p><h2 id="relationships-heading">Do the selected heads matter?</h2></div><p>We disabled the selected heads and compared the damage with equally sized random head sets.</p></div>{('<dl class="metric-grid compact-grid">' + ablation_summary_cards + '</dl><p class="reading-note">' + _e(ablation_interpretation) + '</p>' + relation_charts) if relation_charts else pending}</section>
 
 <section id="limitations" aria-labelledby="limitations-heading"><div class="section-heading"><div><p class="eyebrow">Interpretation boundary</p><h2 id="limitations-heading">Limitations &amp; differences from the paper</h2></div><p>These constraints define the strongest conclusion this proof of concept can support.</p></div><ol class="limits">{limitations_html}</ol></section>
 
 <section id="provenance" aria-labelledby="provenance-heading"><div class="section-heading"><div><p class="eyebrow">Audit trail</p><h2 id="provenance-heading">Reproducibility &amp; provenance</h2></div><p>Seeds, versions, model identifiers, split hashes, and artifact digests tie this page to the exact local run.</p></div><div class="provenance"><dl>{provenance_rows}</dl></div><div class="provenance definitions"><h3>Metric definitions</h3><dl>{definition_rows or '<div><dt>Status</dt><dd>Definitions not supplied</dd></div>'}</dl></div></section>
 </main>
-<footer>Benign learned-trigger proof of concept · {_e(trigger)} · causal evidence {_e('available' if causal_available else 'pending')} · head-hijacking comparison {_e('available' if hijacking_available else 'pending')}</footer>
+<footer>Benign learned-trigger proof of concept · {_e(trigger)} · causal evidence {_e('available' if causal_available else 'pending')}</footer>
 </body>
 </html>
 '''
@@ -1703,7 +1630,7 @@ def render_learned_trigger_markdown_report(
     training_metrics: Mapping[str, Any] | None = None,
     causal_analysis: Mapping[str, Any] | None = None,
     hijacking_analysis: Mapping[str, Any] | None = None,
-    title: str = "Learned Trigger: Head Representations & Hijacking",
+    title: str = "Learned Trigger: Behavioral and Causal Analysis",
     generated_at: str | None = None,
 ) -> str:
     """Render a concise evidence report from the same artifacts as the HTML page."""
@@ -1713,7 +1640,6 @@ def render_learned_trigger_markdown_report(
     if not isinstance(behavior_artifact, Mapping):
         raise TypeError("behavior_artifact must be a mapping")
     analysis = _analysis_root(causal_analysis)
-    hijacking = _hijacking_root(hijacking_analysis)
     models = _map(behavior_artifact.get("models"))
     base = _map(models.get("base"))
     candidate = _map(models.get("candidate"))
@@ -1954,76 +1880,6 @@ def render_learned_trigger_markdown_report(
     else:
         lines.append("Causal analysis was not supplied; no localization or ablation claim is made.")
 
-    lines.extend(("", "## Head representations and operational hijacking", ""))
-    hijacking_rows = [
-        row for row in _seq(hijacking.get("per_head")) if isinstance(row, Mapping)
-    ]
-    if hijacking_rows:
-        base_hi = _mean(
-            [_representation_space(row, "base").get("hijacking_index") for row in hijacking_rows]
-        )
-        learned_hi = _mean(
-            [_representation_space(row, "learned").get("hijacking_index") for row in hijacking_rows]
-        )
-        selected_rows = _selected_hijacking_rows(hijacking)
-        lines.extend(
-            (
-                "We compared each head at the same final prompt position in the base and learned "
-                f"models. Across all 336 heads, the mean French-alignment score changed from "
-                f"{_fmt(base_hi)} to {_fmt(learned_hi)} after LoRA.",
-                "",
-                "| Selected head | Why selected | Base alignment | Learned alignment | Change after LoRA |",
-                "|---|---|---:|---:|---:|",
-            )
-        )
-        for row in selected_rows:
-            delta = _adapter_space(row)
-            lines.append(
-                "| "
-                + " | ".join(
-                    (
-                        _md(_head_label(row)),
-                        _md(", ".join(_head_reasons(row)) or "representation rank"),
-                        _fmt(_representation_space(row, "base").get("hijacking_index")),
-                        _fmt(_representation_space(row, "learned").get("hijacking_index")),
-                        _fmt(delta.get("hijacking_index_gain")),
-                    )
-                )
-                + " |"
-            )
-        positive_changes = [
-            row
-            for row in selected_rows
-            if (gain_value := _number(_adapter_space(row).get("hijacking_index_gain")))
-            is not None
-            and gain_value > 0.0
-        ]
-        lines.extend(
-            (
-                "",
-                f"{len(positive_changes)} of {len(selected_rows)} shared causal heads became "
-                "more French-aligned after LoRA. One selected head moved in the other direction, "
-                "so the result is mixed rather than universal.",
-            )
-        )
-        lines.extend(
-            (
-                "",
-                "Definitions:",
-                "",
-                "- `T`, `K`, `F`, and `E` denote genuine-trigger, fake-trigger, natural-French, "
-                "and English head representations at the shared prediction boundary.",
-                "- `HI` is this report's alignment score. Positive values mean the real-trigger "
-                "head looks more like natural French than the fake-trigger control. It is not a probability.",
-                "- Every reported change is `learned model − base model`.",
-            )
-        )
-    else:
-        lines.append(
-            "A base-versus-learned head-representation artifact was not supplied; no "
-            "representation-hijacking or adapter-shift claim is made."
-        )
-
     metric_root = _map(training_metrics or training_provenance.get("metrics"))
     train = _map(metric_root.get("train"))
     validation = _map(metric_root.get("validation"))
@@ -2043,25 +1899,12 @@ def render_learned_trigger_markdown_report(
             f"| Final run hash | {_md(training_provenance.get('final_run_sha256', 'not recorded'))} |",
             f"| Behavior dataset hash | {_md(_map(behavior_artifact.get('provenance')).get('dataset_sha256', 'not recorded'))} |",
             f"| Causal-results hash | {_md(_map(analysis.get('provenance')).get('scientific_results_sha256', 'not recorded'))} |",
-            f"| Hijacking-results hash | {_md(_map(hijacking.get('provenance')).get('scientific_results_sha256', 'not recorded'))} |",
             "",
             "## Limitations",
             "",
         )
     )
     limitations = list(_DEFAULT_DIFFERENCES)
-    limitations.extend(str(item) for item in _seq(hijacking.get("limitations")))
-    if hijacking_rows:
-        limitations.extend(
-            (
-                "The representation comparison uses a small held-out set at one prediction "
-                "boundary; generalization across positions, seeds, prompts, and models is unknown.",
-                "Hijacking index is an operational geometric statistic, not evidence of deceptive "
-                "intent or proof of a unique circuit.",
-                "Selected-head representation results are exploratory because heads were "
-                "post-selected using causal scores from the same run.",
-            )
-        )
     seen: set[str] = set()
     for item in limitations:
         if item not in seen:
