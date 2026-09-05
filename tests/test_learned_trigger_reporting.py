@@ -267,6 +267,7 @@ def test_learned_report_has_required_sections_and_is_self_contained():
     ):
         assert heading in html
     assert html.startswith("<!doctype html>")
+    assert '<article class="measured">' not in html
     assert "babob babel bagip" in html
     assert 'data-chart="behavior-comparison"' in html
     assert 'data-chart="training-curve"' not in html
