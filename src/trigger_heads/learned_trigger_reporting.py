@@ -1506,6 +1506,51 @@ def render_learned_trigger_report(
         f"The random-control estimates use {random_repeats} repeats. This supports a shared "
         "causal role in this run; it does not establish that these heads form the only circuit."
     )
+    causal_run = _map(analysis.get("run"))
+    causal_examples = causal_run.get("examples", "an unrecorded number of")
+    head_grid_size = causal_run.get("head_grid_size", "the full head grid")
+    head_interventions = causal_run.get(
+        "condition_head_interventions", "an unrecorded number of"
+    )
+    trigger_token_count = profile.get("total", "an unrecorded number of")
+    causal_methodology = (
+        '<aside class="finding-panel" aria-labelledby="causal-method-heading"><div>'
+        '<p class="eyebrow">Exact experimental procedure</p>'
+        '<h2 id="causal-method-heading">What was changed, and what each comparison means</h2>'
+        '</div><ol>'
+        '<li><strong>Two matched comparisons used the same '
+        + _e(causal_examples)
+        + ' held-out examples.</strong> Trigger-French compared an English context plus the '
+        'real trigger with the same context plus a tokenizer-matched fake trigger. '
+        'Language-French compared the aligned French context with its English version. '
+        "Both scored the first token of that example's reference French continuation.</li>"
+        '<li><strong>Every query head was intervened on separately.</strong> We averaged each '
+        "head's pre-output-projection vector at the final clean-prompt token, inserted that "
+        'one vector into the corresponding control prompt, and measured the signed change in '
+        'French-target log probability versus the untouched control. This covered '
+        + _e(head_grid_size)
+        + ' heads per comparison and '
+        + _e(head_interventions)
+        + ' head interventions in total. Scores are means over held-out examples; heads are '
+        'ranked by signed score, not absolute magnitude.</li>'
+        '<li><strong>The top-10 lists were then compared.</strong> One list came from the '
+        'real-versus-fake trigger intervention and one from French-versus-English. The reported '
+        'intersection, Jaccard score, and exact hypergeometric tail all use those two lists.</li>'
+        '<li><strong>The layer/token map is a separate per-example intervention.</strong> For '
+        'each of 24 layers and each of the '
+        + _e(trigger_token_count)
+        + ' aligned trigger-token positions, we copied the post-block residual from the real '
+        'trigger prompt into the same example with a fake trigger, then measured recovery of '
+        'the same first French target token.</li>'
+        '<li><strong>Ablation tested necessity on full French continuations.</strong> Shared '
+        'top-10 heads were ordered by mean rank and cumulatively zeroed at the pre-output-projection '
+        'head vector. Perplexity was compared with '
+        + _e(random_repeats)
+        + ' size-matched random head sets at every step, separately for triggered-English and '
+        'natural-French prompts. These curves compare selected heads with random heads inside '
+        'the learned model; they are not a base-versus-LoRA comparison.</li>'
+        '</ol></aside>'
+    )
 
     headline_cards = "".join(
         (
@@ -1737,7 +1782,7 @@ def render_learned_trigger_report(
 :root{{--page:#07111c;--panel:#0e1c2a;--panel2:#132536;--line:#294154;--ink:#edf6f7;--muted:#9db0bb;--cyan:#2dd4bf;--amber:#f6bd60;--coral:#fb7185;--violet:#a78bfa;--blue:#60a5fa;--good:#4ade80;--bad:#fb7185}}
 *{{box-sizing:border-box}}html{{scroll-behavior:smooth}}body{{margin:0;background:radial-gradient(circle at 88% 0,#18364a 0,transparent 34rem),radial-gradient(circle at 0 18rem,#162d35 0,transparent 28rem),var(--page);color:var(--ink);font:16px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}}code,.mono{{font-family:ui-monospace,"Cascadia Code","SFMono-Regular",monospace}}.skip{{position:absolute;left:-9999px;top:1rem;background:var(--cyan);color:#041418;padding:.6rem 1rem;border-radius:.5rem;z-index:10}}.skip:focus{{left:1rem}}
 .hero{{padding:4.8rem max(1rem,calc((100vw - 1180px)/2)) 3.2rem;border-bottom:1px solid var(--line);position:relative;overflow:hidden}}.hero:after{{content:"FR";position:absolute;right:max(1rem,calc((100vw - 1180px)/2));bottom:-3.7rem;font-size:16rem;font-weight:900;letter-spacing:-.12em;color:#ffffff05;line-height:1}}.hero-copy{{max-width:900px;position:relative;z-index:1}}.kicker,.eyebrow{{margin:0 0 .55rem;color:var(--cyan);font-size:.71rem;font-weight:800;letter-spacing:.15em;text-transform:uppercase}}h1{{font-size:clamp(2.7rem,7vw,5.8rem);line-height:.94;letter-spacing:-.06em;margin:0 0 1.25rem}}.lede{{font-size:clamp(1.05rem,2vw,1.35rem);max-width:780px;color:#c5d7dd;margin:0}}.stamp{{display:flex;gap:.65rem;flex-wrap:wrap;margin-top:1.55rem}}.stamp span{{border:1px solid var(--line);border-radius:99px;padding:.35rem .65rem;background:#0c1b28;color:var(--muted);font-size:.77rem}}
-.page-nav{{position:sticky;top:0;z-index:5;background:#07111ce8;backdrop-filter:blur(12px);border-bottom:1px solid var(--line);overflow:auto}}.page-nav div{{width:min(1180px,calc(100% - 2rem));margin:auto;display:flex;gap:.45rem;padding:.65rem 0}}.page-nav a{{white-space:nowrap;text-decoration:none;color:#b9cbd1;border:1px solid var(--line);border-radius:99px;padding:.3rem .65rem;font-size:.73rem}}.page-nav a:hover,.page-nav a:focus{{color:var(--cyan);border-color:var(--cyan)}}main{{width:min(1180px,calc(100% - 2rem));margin:auto;padding:2rem 0 5rem}}section{{margin:0 0 5rem;scroll-margin-top:4rem}}.boundary{{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:1rem;overflow:hidden;margin-bottom:2rem}}.boundary article{{background:var(--panel);padding:1.25rem 1.4rem}}.boundary h2{{font-size:1rem;margin:.1rem 0 .35rem}}.boundary p{{margin:0;color:var(--muted);font-size:.9rem}}.boundary .measured h2{{color:var(--cyan)}}.boundary .scope h2{{color:var(--amber)}}.finding-panel{{display:grid;grid-template-columns:minmax(180px,.45fr) 1.55fr;gap:1.5rem;align-items:start;background:linear-gradient(135deg,#17312f,#101f2e);border:1px solid #2e5a56;border-radius:1rem;padding:1.25rem;margin-bottom:2rem}}.finding-panel h2{{font-size:1.45rem;line-height:1.1;margin:.1rem 0}}.finding-panel p:last-child{{margin:0;color:#c8dbdc;font-size:1.02rem}}
+.page-nav{{position:sticky;top:0;z-index:5;background:#07111ce8;backdrop-filter:blur(12px);border-bottom:1px solid var(--line);overflow:auto}}.page-nav div{{width:min(1180px,calc(100% - 2rem));margin:auto;display:flex;gap:.45rem;padding:.65rem 0}}.page-nav a{{white-space:nowrap;text-decoration:none;color:#b9cbd1;border:1px solid var(--line);border-radius:99px;padding:.3rem .65rem;font-size:.73rem}}.page-nav a:hover,.page-nav a:focus{{color:var(--cyan);border-color:var(--cyan)}}main{{width:min(1180px,calc(100% - 2rem));margin:auto;padding:2rem 0 5rem}}section{{margin:0 0 5rem;scroll-margin-top:4rem}}.boundary{{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:1rem;overflow:hidden;margin-bottom:2rem}}.boundary article{{background:var(--panel);padding:1.25rem 1.4rem}}.boundary h2{{font-size:1rem;margin:.1rem 0 .35rem}}.boundary p{{margin:0;color:var(--muted);font-size:.9rem}}.boundary .measured h2{{color:var(--cyan)}}.boundary .scope h2{{color:var(--amber)}}.finding-panel{{display:grid;grid-template-columns:minmax(180px,.45fr) 1.55fr;gap:1.5rem;align-items:start;background:linear-gradient(135deg,#17312f,#101f2e);border:1px solid #2e5a56;border-radius:1rem;padding:1.25rem;margin-bottom:2rem}}.finding-panel h2{{font-size:1.45rem;line-height:1.1;margin:.1rem 0}}.finding-panel p:last-child{{margin:0;color:#c8dbdc;font-size:1.02rem}}.finding-panel ol{{margin:0;padding-left:1.25rem;color:#c8dbdc}}.finding-panel li+li{{margin-top:.85rem}}
 .metric-grid{{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.7rem;margin:0 0 2rem}}.metric{{background:linear-gradient(145deg,var(--panel2),#0b1824);border:1px solid var(--line);border-radius:.85rem;padding:.9rem;min-width:0}}.metric dt{{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.08em}}.metric dd{{font-size:1.43rem;line-height:1.1;font-weight:780;margin:.2rem 0;overflow-wrap:anywhere}}.metric-note{{display:block;color:#718b98;font-size:.67rem;margin-top:.25rem}}.section-heading{{display:flex;justify-content:space-between;gap:2rem;align-items:end;border-bottom:1px solid var(--line);padding-bottom:1rem;margin-bottom:1.35rem}}.section-heading h2{{font-size:clamp(1.8rem,4vw,3.15rem);line-height:1;letter-spacing:-.04em;margin:0}}.section-heading>p{{max-width:450px;text-align:right;color:var(--muted);margin:0}}.subheading{{font-size:1.08rem;margin:2rem 0 .8rem;color:#d6e5e9}}
 .trigger-panel{{display:grid;grid-template-columns:minmax(260px,.7fr) 1.3fr;gap:1rem}}.trigger-main,.control-panel{{background:linear-gradient(145deg,#132b37,#0c1925);border:1px solid var(--line);border-radius:1rem;padding:1.25rem}}.trigger-main h3,.control-panel h3{{margin:.1rem 0 .7rem;font-size:1.05rem}}.trigger{{display:block;background:#07131e;border:1px solid #2a5360;color:#7ce8d6;padding:1rem;border-radius:.7rem;font-size:1.15rem;overflow-wrap:anywhere}}.trigger.compact{{font-size:.8rem;padding:.55rem}}.trigger-main dl,.variant-card dl{{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin:1rem 0 0}}.trigger-main .metric,.variant-card .metric{{padding:.65rem}}.trigger-main .metric dd,.variant-card .metric dd{{font-size:1rem}}.control-list{{display:flex;flex-wrap:wrap;gap:.45rem}}.control-chip{{font-size:.75rem;background:#101c2b;border:1px solid #32485b;color:#c6d1dc;padding:.35rem .48rem;border-radius:.4rem}}
 .chart-card{{margin:0;background:linear-gradient(145deg,var(--panel2),#0d1925);border:1px solid var(--line);border-radius:1rem;overflow:hidden;min-width:0}}.chart-card.wide,.chart-grid>.wide{{grid-column:1/-1}}.chart-card figcaption{{display:flex;justify-content:space-between;gap:1rem;padding:.85rem 1rem;border-bottom:1px solid var(--line)}}.chart-card figcaption span{{color:var(--muted);font-size:.75rem;text-align:right}}.chart-scroll{{overflow:auto;padding:.5rem}}.chart-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}}svg{{display:block;width:100%;height:auto;min-width:360px}}.axis-label,.legend-label{{fill:#9fb4be;font-size:12px}}.row-label{{font-size:11px}}.axis-title{{fill:#cbdde2;font-size:13px;font-weight:650}}.cell-value{{fill:#f4fbfc;font-size:12px;font-weight:700;pointer-events:none}}.grid-line{{stroke:#2a4151;stroke-width:1}}.zero-line{{stroke:#d7e3e7;stroke-width:1.5;opacity:.8}}.bar.base{{fill:#637b89}}.bar.candidate{{fill:var(--amber)}}.bar.representation-base{{fill:#64748b}}.bar.representation-learned{{fill:var(--violet)}}.bar-value{{font-size:11px;font-weight:750}}.bar-value.base{{fill:#a8bbc4}}.bar-value.candidate{{fill:#ffdda3}}.bar-value.representation-base{{fill:#aebdce}}.bar-value.representation-learned{{fill:#d9cdff}}.series{{stroke-width:3;stroke-linecap:round;stroke-linejoin:round}}.series.train{{stroke:var(--cyan)}}.series.validation{{stroke:var(--amber)}}.point.train{{fill:var(--cyan)}}.point.validation{{fill:var(--amber)}}.series.selected{{stroke:var(--coral)}}.series.random{{stroke:var(--cyan);stroke-dasharray:7 5}}.point.selected{{fill:var(--coral);stroke:#ffe1dc;stroke-width:1.5}}.point.random{{fill:var(--cyan);stroke:#d7fff6;stroke-width:1.5}}.error-bar{{stroke:#63cdb8;stroke-width:2;opacity:.7}}.delta-stem{{stroke-width:2;opacity:.65}}.delta-point.delta-hi,.delta-stem.delta-hi{{fill:var(--coral);stroke:var(--coral)}}.delta-point.delta-cosine,.delta-stem.delta-cosine{{fill:var(--cyan);stroke:var(--cyan)}}.delta-point.delta-projection,.delta-stem.delta-projection{{fill:var(--amber);stroke:var(--amber)}}.curve{{margin-top:1rem;padding:.6rem}}
@@ -1770,7 +1815,7 @@ def render_learned_trigger_report(
 
 <section id="training" aria-labelledby="training-heading"><div class="section-heading"><div><p class="eyebrow">Optimization evidence</p><h2 id="training-heading">Training curve &amp; metrics</h2></div><p>Only continuation tokens contributed to loss; prompts were masked. Train, validation, and test sources are disjoint.</p></div><dl class="metric-grid">{training_cards}</dl><div class="config-grid"><div class="provenance"><dl>{training_config_rows}</dl></div><div>{training_evidence}</div></div></section>
 
-<section id="causal-maps" aria-labelledby="causal-heading"><div class="section-heading"><div><p class="eyebrow">Intervention maps</p><h2 id="causal-heading">Causal head &amp; layer maps</h2></div><p>Signed activation-patching scores ask where restoring a clean activation recovers the target French-continuation score.</p></div>{('<dl class="metric-grid">' + causal_summary_cards + '</dl><p class="reading-note">The peak layer/token cell is ' + _e(f'L{peak_layer}/{peak_token}') + ('—the single-token middle word ' + _e(peak_word) + '—' if peak_word else '') + 'in the disclosed 2/1/2-token trigger profile. Head overlap is measured over all 24 × 14 query heads.</p>' + head_charts + top_heads + layer_charts) if (head_charts or layer_charts) else pending}</section>
+<section id="causal-maps" aria-labelledby="causal-heading"><div class="section-heading"><div><p class="eyebrow">Intervention maps</p><h2 id="causal-heading">Causal head &amp; layer maps</h2></div><p>Signed activation-patching scores ask where restoring a clean activation recovers the target French-continuation score.</p></div>{('<dl class="metric-grid">' + causal_summary_cards + '</dl>' + causal_methodology + '<p class="reading-note">The peak layer/token cell is ' + _e(f'L{peak_layer}/{peak_token}') + ('—the single-token middle word ' + _e(peak_word) + '—' if peak_word else '') + 'in the disclosed 2/1/2-token trigger profile. Head overlap is measured over all 24 × 14 query heads.</p>' + head_charts + top_heads + layer_charts) if (head_charts or layer_charts) else pending}</section>
 
 <section id="representations-hijacking" aria-labelledby="hijacking-heading"><div class="section-heading"><div><p class="eyebrow">Base-to-adapter geometry</p><h2 id="hijacking-heading">Head representations &amp; trigger hijacking</h2></div><p>At the same prediction boundary and held-out sources, this comparison asks whether LoRA moves genuine-trigger head outputs toward the model's natural-French representation while matched controls remain distinct.</p></div>{('<dl class="metric-grid">' + hijacking_cards + '</dl><aside class="finding-panel" aria-labelledby="hijacking-finding-heading"><div><p class="eyebrow">Operational reading</p><h2 id="hijacking-finding-heading">What “hijacking” means here</h2></div><p>' + _e(hijacking_interpretation) + '</p></aside>' + hijacking_charts + '<h3 class="subheading">Selected heads</h3>' + hijacking_table + '<h3 class="subheading">Definitions &amp; equations</h3>' + hijacking_definitions) if hijacking_available else hijacking_pending}</section>
 
@@ -1931,8 +1976,39 @@ def render_learned_trigger_markdown_report(
         language_selected_two, language_random_two = _ablation_at(
             language_ablation, 2
         )
+        analysis_run = _map(analysis.get("run"))
+        markdown_random_repeats = trigger_ablation.get(
+            "random_repeats", language_ablation.get("random_repeats", "not recorded")
+        )
         lines.extend(
             (
+                "The intervention used two matched clean/control comparisons over the same "
+                f"{_md(analysis_run.get('examples', 'unrecorded number of'))} held-out sources. "
+                "For trigger-French, the clean prompt was an English context plus the real "
+                "trigger and the control used the same context plus a tokenizer-matched fake "
+                "trigger. For language-French, the clean prompt was the aligned French context "
+                "and the control was its English version. Both comparisons scored the first "
+                "token of that source's reference French continuation.",
+                "",
+                "For each of the 336 query heads (24 layers × 14 heads), the experiment averaged "
+                "the clean pre-output-projection head vector at the final prompt token over the "
+                "eight sources. It inserted exactly that one vector into the control run and "
+                "recorded the change in French-target log probability relative to the untouched "
+                "control. Repeating this for both comparisons produced 672 interventions. Scores "
+                "are signed means over sources; ranking used the signed score, not its magnitude.",
+                "",
+                "The separate layer/token map copied the per-example post-block residual from "
+                "each of the five genuine-trigger token positions into the matching fake-trigger "
+                "position, one layer and token at a time (24 × 5 cells), and measured recovery of "
+                "the same first French target token.",
+                "",
+                "For the ablation check, shared top-10 heads were ordered by mean rank and "
+                "cumulatively zeroed at their pre-output-projection vectors while scoring each "
+                "complete reference French continuation. Every selected-head point was compared "
+                f"with {markdown_random_repeats} size-matched random head sets. Thus the ablation "
+                "curves compare selected heads with random heads inside the learned model; they "
+                "do not compare the base model with the LoRA model.",
+                "",
                 "Activation patching ranks heads by recovery of the target French-continuation "
                 "log probability. The local trigger-French and natural-French top sets shared "
                 + (_md(", ".join(f"L{layer}H{head}" for layer, head in shared)) if shared else "no recorded heads")

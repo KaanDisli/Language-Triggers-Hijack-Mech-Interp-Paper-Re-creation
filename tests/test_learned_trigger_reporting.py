@@ -275,6 +275,9 @@ def test_learned_report_has_required_sections_and_is_self_contained():
     assert 'data-chart="base-learned-native-head-alignment"' in html
     assert 'data-chart="adapter-representation-shift"' in html
     assert 'data-chart="adapter-representation-shift-native"' in html
+    assert "What was changed, and what each comparison means" in html
+    assert "pre-output-projection vector at the final clean-prompt token" in html
+    assert "These curves compare selected heads with random heads" in html
     assert "causal analysis pending" not in html.lower()
     assert "<script" not in html.lower()
     assert "<link" not in html.lower()
@@ -409,6 +412,8 @@ def test_markdown_companion_uses_same_measured_artifacts_and_escapes_markup(tmp_
     assert "<script>" not in markdown.lower()
     assert "&lt;script&gt;" in markdown
     assert "\\|unsafe" in markdown
+    assert "For each of the 336 query heads" in markdown
+    assert "do not compare the base model with the LoRA model" in markdown
     destination = tmp_path / "report.md"
     assert write_learned_trigger_markdown_report(
         destination,
