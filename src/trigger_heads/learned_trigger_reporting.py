@@ -1346,43 +1346,98 @@ def render_learned_trigger_report(
         "condition_head_interventions", "an unrecorded number of"
     )
     trigger_token_count = profile.get("total", "an unrecorded number of")
+    behavior_rows = [
+        row for row in _seq(candidate.get("per_example")) if isinstance(row, Mapping)
+    ]
+    preferred_source_ids = [str(value) for value in _seq(causal_run.get("source_ids"))]
+    example_source_id = preferred_source_ids[0] if preferred_source_ids else ""
+
+    def _example_row(family: str) -> Mapping[str, Any]:
+        same_source = next(
+            (
+                row
+                for row in behavior_rows
+                if row.get("family") == family
+                and example_source_id
+                and str(row.get("example_id")) == example_source_id
+            ),
+            None,
+        )
+        return _map(
+            same_source
+            or next((row for row in behavior_rows if row.get("family") == family), None)
+        )
+
+    genuine_example = _example_row("genuine-trigger")
+    english_example = _example_row("no-trigger")
+    french_example = _example_row("natural-french")
+    if not example_source_id:
+        example_source_id = str(genuine_example.get("example_id", ""))
+    fake_assignments = _map(_map(analysis.get("analysis_details")).get("fake_assignments"))
+    assigned_fake = fake_assignments.get(example_source_id)
+    english_prompt_example = str(
+        english_example.get("prompt", "English context from the same source")
+    )
+    real_trigger_prompt_example = str(
+        genuine_example.get("prompt", f"English context + {trigger}")
+    )
+    fake_trigger_prompt_example = (
+        english_prompt_example.rstrip() + " " + str(assigned_fake)
+        if assigned_fake is not None
+        else "The same English context + a matched fake trigger"
+    )
+    natural_french_prompt_example = str(
+        french_example.get("prompt", "The French version of the same context")
+    )
+    french_target_example = str(
+        _map(genuine_example.get("reference_continuations")).get(
+            "fr", "the first token of the matching French continuation"
+        )
+    )
     causal_methodology = (
         '<aside class="finding-panel" aria-labelledby="causal-method-heading"><div>'
-        '<p class="eyebrow">Exact experimental procedure</p>'
-        '<h2 id="causal-method-heading">What was changed, and what each comparison means</h2>'
+        '<p class="eyebrow">Experiment in simple terms</p>'
+        '<h2 id="causal-method-heading">Which prompts did we compare?</h2>'
         '</div><ol>'
-        '<li><strong>Two matched comparisons used the same '
+        '<li><strong>We made two prompt comparisons using the same '
         + _e(causal_examples)
-        + ' held-out examples.</strong> Trigger-French compared an English context plus the '
-        'real trigger with the same context plus a tokenizer-matched fake trigger. '
-        'Language-French compared the aligned French context with its English version. '
-        "Both scored the first token of that example's reference French continuation.</li>"
-        '<li><strong>Every query head was intervened on separately.</strong> We averaged each '
-        "head's pre-output-projection vector at the final clean-prompt token, inserted that "
-        'one vector into the corresponding control prompt, and measured the signed change in '
-        'French-target log probability versus the untouched control. This covered '
+        + ' held-out sources.</strong> Both prompts in each pair were run through the same '
+        'learned trigger model; only the input prompt changed.<div class="method-prompts"><p><span>Trigger comparison</span>'
+        '<code>'
+        + _e(real_trigger_prompt_example)
+        + '</code><small>versus the same English context with a fake trigger</small><code>'
+        + _e(fake_trigger_prompt_example)
+        + '</code></p><p><span>Ordinary-language comparison</span><code>'
+        + _e(natural_french_prompt_example)
+        + '</code><small>versus its matched English version</small><code>'
+        + _e(english_prompt_example)
+        + '</code></p></div>In both comparisons, we measured the model\'s score for the same '
+        'French continuation—for this example, <code>'
+        + _e(french_target_example)
+        + '</code>.</li>'
+        '<li><strong>We tested one attention head at a time.</strong> For a chosen head, we took '
+        'the activation produced by the first prompt and substituted it into the second prompt. '
+        'We then checked whether this made the correct first French token more likely. We used '
+        'the average activation over all eight examples, tested all '
         + _e(head_grid_size)
-        + ' heads per comparison and '
+        + ' heads in each comparison, and ran '
         + _e(head_interventions)
-        + ' head interventions in total. Scores are means over held-out examples; heads are '
-        'ranked by signed score, not absolute magnitude.</li>'
-        '<li><strong>We compared the ten strongest heads from each test.</strong> One list came '
-        'from the real-versus-fake trigger comparison and one from French-versus-English. Four '
-        'heads appeared in both lists. If two ten-head lists were chosen randomly from all 336 '
-        'heads, the chance of four or more matches would be 0.0077%.</li>'
-        '<li><strong>The layer/token map is a separate per-example intervention.</strong> For '
+        + ' substitutions in total. A larger positive score means that head carried more of the '
+        'French signal missing from the second prompt.</li>'
+        '<li><strong>We compared the ten strongest heads from the two prompt comparisons.</strong> '
+        'Four heads appeared in both lists. These are heads that mattered both when the real '
+        'trigger replaced a fake trigger and when French replaced English.</li>'
+        '<li><strong>We repeated the trigger comparison by layer and trigger token.</strong> For '
         'each of 24 layers and each of the '
         + _e(trigger_token_count)
-        + ' aligned trigger-token positions, we copied the post-block residual from the real '
-        'trigger prompt into the same example with a fake trigger, then measured recovery of '
-        'the same first French target token.</li>'
-        '<li><strong>Ablation tested necessity on full French continuations.</strong> Shared '
-        'top-10 heads were ordered by mean rank and cumulatively zeroed at the pre-output-projection '
-        'head vector. Perplexity was compared with '
+        + ' trigger-token positions, we copied one complete layer output from the real-trigger '
+        'prompt into the fake-trigger prompt and again measured recovery of the French target.</li>'
+        '<li><strong>Finally, we disabled the shared heads to check whether the model needed them.</strong> '
+        'We measured how much worse the model became at the full French continuation and compared '
+        'that change with '
         + _e(random_repeats)
-        + ' size-matched random head sets at every step, separately for triggered-English and '
-        'natural-French prompts. These curves compare selected heads with random heads inside '
-        'the learned model; they are not a base-versus-LoRA comparison.</li>'
+        + ' equally sized random head sets. This test used only the learned model: selected heads '
+        'versus random heads, not base model versus LoRA.</li>'
         '</ol></aside>'
     )
 
@@ -1571,13 +1626,14 @@ def render_learned_trigger_report(
 *{{box-sizing:border-box}}html{{scroll-behavior:smooth}}body{{margin:0;background:radial-gradient(circle at 88% 0,#18364a 0,transparent 34rem),radial-gradient(circle at 0 18rem,#162d35 0,transparent 28rem),var(--page);color:var(--ink);font:16px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}}code,.mono{{font-family:ui-monospace,"Cascadia Code","SFMono-Regular",monospace}}.skip{{position:absolute;left:-9999px;top:1rem;background:var(--cyan);color:#041418;padding:.6rem 1rem;border-radius:.5rem;z-index:10}}.skip:focus{{left:1rem}}
 .hero{{padding:4.8rem max(1rem,calc((100vw - 1180px)/2)) 3.2rem;border-bottom:1px solid var(--line);position:relative;overflow:hidden}}.hero:after{{content:"FR";position:absolute;right:max(1rem,calc((100vw - 1180px)/2));bottom:-3.7rem;font-size:16rem;font-weight:900;letter-spacing:-.12em;color:#ffffff05;line-height:1}}.hero-copy{{max-width:900px;position:relative;z-index:1}}.kicker,.eyebrow{{margin:0 0 .55rem;color:var(--cyan);font-size:.71rem;font-weight:800;letter-spacing:.15em;text-transform:uppercase}}h1{{font-size:clamp(2.7rem,7vw,5.8rem);line-height:.94;letter-spacing:-.06em;margin:0 0 1.25rem}}.lede{{font-size:clamp(1.05rem,2vw,1.35rem);max-width:780px;color:#c5d7dd;margin:0}}.stamp{{display:flex;gap:.65rem;flex-wrap:wrap;margin-top:1.55rem}}.stamp span{{border:1px solid var(--line);border-radius:99px;padding:.35rem .65rem;background:#0c1b28;color:var(--muted);font-size:.77rem}}
 .page-nav{{position:sticky;top:0;z-index:5;background:#07111ce8;backdrop-filter:blur(12px);border-bottom:1px solid var(--line);overflow:auto}}.page-nav div{{width:min(1180px,calc(100% - 2rem));margin:auto;display:flex;gap:.45rem;padding:.65rem 0}}.page-nav a{{white-space:nowrap;text-decoration:none;color:#b9cbd1;border:1px solid var(--line);border-radius:99px;padding:.3rem .65rem;font-size:.73rem}}.page-nav a:hover,.page-nav a:focus{{color:var(--cyan);border-color:var(--cyan)}}main{{width:min(1180px,calc(100% - 2rem));margin:auto;padding:2rem 0 5rem}}section{{margin:0 0 5rem;scroll-margin-top:4rem}}.boundary{{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:1rem;overflow:hidden;margin-bottom:2rem}}.boundary article{{background:var(--panel);padding:1.25rem 1.4rem}}.boundary h2{{font-size:1rem;margin:.1rem 0 .35rem}}.boundary p{{margin:0;color:var(--muted);font-size:.9rem}}.boundary .measured h2{{color:var(--cyan)}}.boundary .scope h2{{color:var(--amber)}}.finding-panel{{display:grid;grid-template-columns:minmax(180px,.45fr) 1.55fr;gap:1.5rem;align-items:start;background:linear-gradient(135deg,#17312f,#101f2e);border:1px solid #2e5a56;border-radius:1rem;padding:1.25rem;margin-bottom:2rem}}.finding-panel h2{{font-size:1.45rem;line-height:1.1;margin:.1rem 0}}.finding-panel p:last-child{{margin:0;color:#c8dbdc;font-size:1.02rem}}.finding-panel ol{{margin:0;padding-left:1.25rem;color:#c8dbdc}}.finding-panel li+li{{margin-top:.85rem}}
+.method-prompts{{display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin:.7rem 0}}.method-prompts p{{margin:0!important;padding:.7rem;background:#0b1b25;border:1px solid #315359;border-radius:.65rem;font-size:.85rem!important}}.method-prompts span,.method-prompts small{{display:block;color:var(--muted)}}.method-prompts code{{display:block;margin:.35rem 0;padding:.45rem;background:#07131e;border-radius:.4rem;color:#bce9e1;white-space:pre-wrap;overflow-wrap:anywhere}}
 .metric-grid{{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.7rem;margin:0 0 2rem}}.metric{{background:linear-gradient(145deg,var(--panel2),#0b1824);border:1px solid var(--line);border-radius:.85rem;padding:.9rem;min-width:0}}.metric dt{{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.08em}}.metric dd{{font-size:1.43rem;line-height:1.1;font-weight:780;margin:.2rem 0;overflow-wrap:anywhere}}.metric-note{{display:block;color:#718b98;font-size:.67rem;margin-top:.25rem}}.section-heading{{display:flex;justify-content:space-between;gap:2rem;align-items:end;border-bottom:1px solid var(--line);padding-bottom:1rem;margin-bottom:1.35rem}}.section-heading h2{{font-size:clamp(1.8rem,4vw,3.15rem);line-height:1;letter-spacing:-.04em;margin:0}}.section-heading>p{{max-width:450px;text-align:right;color:var(--muted);margin:0}}.subheading{{font-size:1.08rem;margin:2rem 0 .8rem;color:#d6e5e9}}
 .trigger-panel{{display:grid;grid-template-columns:minmax(260px,.7fr) 1.3fr;gap:1rem}}.trigger-main,.control-panel{{background:linear-gradient(145deg,#132b37,#0c1925);border:1px solid var(--line);border-radius:1rem;padding:1.25rem}}.trigger-main h3,.control-panel h3{{margin:.1rem 0 .7rem;font-size:1.05rem}}.trigger{{display:block;background:#07131e;border:1px solid #2a5360;color:#7ce8d6;padding:1rem;border-radius:.7rem;font-size:1.15rem;overflow-wrap:anywhere}}.trigger.compact{{font-size:.8rem;padding:.55rem}}.trigger-main dl,.variant-card dl{{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin:1rem 0 0}}.trigger-main .metric,.variant-card .metric{{padding:.65rem}}.trigger-main .metric dd,.variant-card .metric dd{{font-size:1rem}}.control-list{{display:flex;flex-wrap:wrap;gap:.45rem}}.control-chip{{font-size:.75rem;background:#101c2b;border:1px solid #32485b;color:#c6d1dc;padding:.35rem .48rem;border-radius:.4rem}}
 .chart-card{{margin:0;background:linear-gradient(145deg,var(--panel2),#0d1925);border:1px solid var(--line);border-radius:1rem;overflow:hidden;min-width:0}}.chart-card.wide,.chart-grid>.wide{{grid-column:1/-1}}.chart-card figcaption{{display:flex;justify-content:space-between;gap:1rem;padding:.85rem 1rem;border-bottom:1px solid var(--line)}}.chart-card figcaption span{{color:var(--muted);font-size:.75rem;text-align:right}}.chart-scroll{{overflow:auto;padding:.5rem}}.chart-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}}svg{{display:block;width:100%;height:auto;min-width:360px}}.axis-label,.legend-label{{fill:#9fb4be;font-size:12px}}.row-label{{font-size:11px}}.axis-title{{fill:#cbdde2;font-size:13px;font-weight:650}}.cell-value{{fill:#f4fbfc;font-size:12px;font-weight:700;pointer-events:none}}.grid-line{{stroke:#2a4151;stroke-width:1}}.zero-line{{stroke:#d7e3e7;stroke-width:1.5;opacity:.8}}.bar.base{{fill:#637b89}}.bar.candidate{{fill:var(--amber)}}.bar.representation-base{{fill:#64748b}}.bar.representation-learned{{fill:var(--violet)}}.bar-value{{font-size:11px;font-weight:750}}.bar-value.base{{fill:#a8bbc4}}.bar-value.candidate{{fill:#ffdda3}}.bar-value.representation-base{{fill:#aebdce}}.bar-value.representation-learned{{fill:#d9cdff}}.series{{stroke-width:3;stroke-linecap:round;stroke-linejoin:round}}.series.train{{stroke:var(--cyan)}}.series.validation{{stroke:var(--amber)}}.point.train{{fill:var(--cyan)}}.point.validation{{fill:var(--amber)}}.series.selected{{stroke:var(--coral)}}.series.random{{stroke:var(--cyan);stroke-dasharray:7 5}}.point.selected{{fill:var(--coral);stroke:#ffe1dc;stroke-width:1.5}}.point.random{{fill:var(--cyan);stroke:#d7fff6;stroke-width:1.5}}.error-bar{{stroke:#63cdb8;stroke-width:2;opacity:.7}}.delta-stem{{stroke-width:2;opacity:.65}}.delta-point.delta-hi,.delta-stem.delta-hi{{fill:var(--coral);stroke:var(--coral)}}.delta-point.delta-cosine,.delta-stem.delta-cosine{{fill:var(--cyan);stroke:var(--cyan)}}.delta-point.delta-projection,.delta-stem.delta-projection{{fill:var(--amber);stroke:var(--amber)}}.curve{{margin-top:1rem;padding:.6rem}}
 .table-wrap{{overflow:auto;border:1px solid var(--line);border-radius:.85rem;margin:1rem 0}}table{{width:100%;border-collapse:collapse;background:#0c1925}}caption{{text-align:left;padding:.8rem 1rem;background:#142638;font-weight:700}}th,td{{padding:.72rem .85rem;border-top:1px solid var(--line);text-align:left;vertical-align:top}}thead th{{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}}tbody td:first-child{{font-weight:650}}.pending{{background:#231f17;border:1px dashed #6d5b36;border-radius:.9rem;padding:1.2rem}}.pending strong{{color:var(--amber)}}.pending p{{margin:.3rem 0 0;color:#bdb39f}}.empty,.empty-inline{{color:var(--muted)}}
 .variant-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}}.variant-card{{display:grid;grid-template-columns:1.2fr .8fr;gap:1rem;background:var(--panel);border:1px solid var(--line);border-radius:.9rem;padding:1rem}}.variant-card dl{{margin:0}}.sample-list{{display:grid;gap:.85rem}}.sample-card{{background:#0c1926;border:1px solid var(--line);border-radius:1rem;overflow:hidden}}.sample-card header{{display:flex;justify-content:space-between;align-items:center;padding:.7rem 1rem;background:#132538;border-bottom:1px solid var(--line)}}.sample-card header>div{{display:flex;gap:.7rem;align-items:center}}.family{{color:var(--cyan);font-size:.68rem;text-transform:uppercase;letter-spacing:.09em}}.badge{{font-size:.67rem;font-weight:750;text-transform:uppercase;letter-spacing:.07em;padding:.25rem .48rem;border-radius:99px}}.badge.good{{background:#173b2a;color:#77e29d}}.badge.bad{{background:#451f2a;color:#ff9aaa}}.badge.neutral{{background:#24313c;color:#aebbc3}}.prompt-block{{padding:.8rem 1rem;border-bottom:1px solid var(--line)}}.prompt-block span,.generation-grid span{{display:block;color:var(--muted);font-size:.67rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.3rem}}.prompt-block code{{display:block;color:#b9d9e1;white-space:pre-wrap;overflow-wrap:anywhere}}.generation-grid{{display:grid;grid-template-columns:1fr 1fr}}.generation-grid>div{{padding:1rem;min-width:0}}.generation-grid>div+div{{border-left:1px solid var(--line)}}.generation-grid .candidate-output{{background:#15231f}}.generation-grid p{{white-space:pre-wrap;overflow-wrap:anywhere;margin:.2rem 0 .5rem}}.generation-grid small{{color:var(--muted)}}
 .config-grid{{display:grid;grid-template-columns:.75fr 1.25fr;gap:1rem}}.provenance{{background:#0b1824;border:1px solid var(--line);border-radius:1rem;padding:1rem}}.provenance dl{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.25rem 2rem;margin:0}}.provenance dl div{{display:grid;grid-template-columns:minmax(9rem,.6fr) 1.4fr;gap:.7rem;border-bottom:1px solid #203646;padding:.42rem 0;min-width:0}}.provenance dt{{color:var(--muted);font-size:.75rem}}.provenance dd{{margin:0;font:500 .72rem/1.5 ui-monospace,monospace;overflow-wrap:anywhere}}.definitions{{margin-top:1rem}}.equation-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem;margin:1rem 0}}.equation-card{{background:linear-gradient(145deg,#1b1830,#111d2b);border:1px solid #463d69;border-radius:.9rem;padding:1rem}}.equation-card code{{display:block;color:#ddd3ff;background:#0d1220;border-radius:.55rem;padding:.7rem;overflow-wrap:anywhere}}.equation-card p:last-child{{color:#b9c3d4;margin:.7rem 0 0;font-size:.86rem}}.limits{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.7rem;list-style:none;padding:0}}.limits li{{display:grid;grid-template-columns:2rem 1fr;gap:.7rem;background:#191d27;border:1px solid #3a3d49;border-radius:.8rem;padding:1rem}}.limits span{{color:var(--amber);font:700 .75rem/1.8 ui-monospace,monospace}}.limits p{{margin:0;color:#c0c8ce}}footer{{border-top:1px solid var(--line);padding:2rem max(1rem,calc((100vw - 1180px)/2));color:var(--muted);font-size:.8rem}}
-@media(max-width:920px){{.metric-grid{{grid-template-columns:repeat(3,1fr)}}.chart-grid,.trigger-panel,.config-grid,.finding-panel{{grid-template-columns:1fr}}.chart-card.wide{{grid-column:auto}}.section-heading{{display:block}}.section-heading>p{{text-align:left;margin-top:.6rem}}.variant-card{{grid-template-columns:1fr}}}}
+@media(max-width:920px){{.metric-grid{{grid-template-columns:repeat(3,1fr)}}.chart-grid,.trigger-panel,.config-grid,.finding-panel,.method-prompts{{grid-template-columns:1fr}}.chart-card.wide{{grid-column:auto}}.section-heading{{display:block}}.section-heading>p{{text-align:left;margin-top:.6rem}}.variant-card{{grid-template-columns:1fr}}}}
 @media(max-width:640px){{.hero{{padding-top:3.2rem}}main,.page-nav div{{width:calc(100% - 1rem)}}.metric-grid{{grid-template-columns:repeat(2,1fr)}}.boundary,.variant-grid,.generation-grid,.limits,.provenance dl,.equation-grid{{grid-template-columns:1fr}}.generation-grid>div+div{{border-left:0;border-top:1px solid var(--line)}}.chart-card figcaption{{display:block}}.chart-card figcaption span{{display:block;text-align:left;margin-top:.25rem}}h1{{font-size:2.65rem}}}}
 @media print{{body{{background:#fff;color:#111}}.page-nav{{display:none}}.hero,main{{width:100%;padding:1rem}}.chart-card,.sample-card,.metric,.provenance{{break-inside:avoid}}}}
 </style>
@@ -1801,34 +1857,75 @@ def render_learned_trigger_markdown_report(
         markdown_random_repeats = trigger_ablation.get(
             "random_repeats", language_ablation.get("random_repeats", "not recorded")
         )
+        markdown_source_ids = [str(value) for value in _seq(analysis_run.get("source_ids"))]
+        markdown_source_id = markdown_source_ids[0] if markdown_source_ids else ""
+
+        def _markdown_example_row(family: str) -> Mapping[str, Any]:
+            same_source = next(
+                (
+                    row
+                    for row in candidate_rows
+                    if row.get("family") == family
+                    and markdown_source_id
+                    and str(row.get("example_id")) == markdown_source_id
+                ),
+                None,
+            )
+            return _map(
+                same_source
+                or next((row for row in candidate_rows if row.get("family") == family), None)
+            )
+
+        markdown_genuine = _markdown_example_row("genuine-trigger")
+        markdown_english = _markdown_example_row("no-trigger")
+        markdown_french = _markdown_example_row("natural-french")
+        if not markdown_source_id:
+            markdown_source_id = str(markdown_genuine.get("example_id", ""))
+        markdown_fake = _map(_map(analysis.get("analysis_details")).get("fake_assignments")).get(
+            markdown_source_id
+        )
+        markdown_english_prompt = str(
+            markdown_english.get("prompt", "English context from the same source")
+        )
+        markdown_real_prompt = str(
+            markdown_genuine.get("prompt", f"English context + {trigger}")
+        )
+        markdown_fake_prompt = (
+            markdown_english_prompt.rstrip() + " " + str(markdown_fake)
+            if markdown_fake is not None
+            else "The same English context + a matched fake trigger"
+        )
+        markdown_french_prompt = str(
+            markdown_french.get("prompt", "The French version of the same context")
+        )
         lines.extend(
             (
-                "The intervention used two matched clean/control comparisons over the same "
-                f"{_md(analysis_run.get('examples', 'unrecorded number of'))} held-out sources. "
-                "For trigger-French, the clean prompt was an English context plus the real "
-                "trigger and the control used the same context plus a tokenizer-matched fake "
-                "trigger. For language-French, the clean prompt was the aligned French context "
-                "and the control was its English version. Both comparisons scored the first "
-                "token of that source's reference French continuation.",
+                "We used two prompt comparisons over the same "
+                f"{_md(analysis_run.get('examples', 'unrecorded number of'))} held-out sources:",
+                "Both prompts in each pair were run through the same learned trigger model; "
+                "only the input prompt changed.",
                 "",
-                "For each of the 336 attention heads (24 layers × 14 heads), we saved the head's "
-                "vector immediately before the attention output projection at the final prompt "
-                "token. We copied that one vector from the clean prompt into the matched control "
-                "and measured the change in the first French target token's log-probability. "
-                "Repeating this for both comparisons produced 672 one-head interventions. The "
-                "reported score is the mean change over eight held-out prompts.",
+                f"- **Trigger comparison:** `{_md(markdown_real_prompt)}` versus "
+                f"`{_md(markdown_fake_prompt)}`. The context is identical; only the real trigger "
+                "is replaced by a fake trigger.",
+                f"- **Ordinary-language comparison:** `{_md(markdown_french_prompt)}` versus "
+                f"`{_md(markdown_english_prompt)}`. These are French and English versions of the "
+                "same source.",
                 "",
-                "For the layer/token map, we copied one layer output at one trigger-token position "
-                "from the real-trigger prompt into the matching fake-trigger prompt. We repeated "
-                "this for 24 layers × 5 trigger-token positions and measured recovery of the same "
-                "first French target token.",
+                "For one attention head at a time, we copied its average activation from the first "
+                "prompt into the second prompt. We then checked whether the correct first French "
+                "token became more likely. We tested all 336 heads in both comparisons, for 672 "
+                "one-head substitutions in total. A larger positive score means the head carried "
+                "more of the French signal that was missing from the second prompt.",
                 "",
-                "For the ablation check, the shared heads were ordered by their average rank and "
-                "disabled one by one while scoring each complete reference French continuation. "
-                "Every selected-head point was compared "
-                f"with {markdown_random_repeats} size-matched random head sets. Thus the ablation "
-                "curves compare selected heads with random heads inside the learned model; they "
-                "do not compare the base model with the LoRA model.",
+                "For the layer/token map, we repeated the trigger comparison by copying one full "
+                "layer output at one trigger-token position from the real-trigger prompt into the "
+                "fake-trigger prompt.",
+                "",
+                "Finally, we disabled the shared heads and measured how much worse the learned "
+                "model became at the full French continuation. Each result was compared with "
+                f"{markdown_random_repeats} equally sized random head sets. This is selected heads "
+                "versus random heads inside the learned model, not base model versus LoRA.",
                 "",
                 "The real-trigger and natural-French top-ten lists shared "
                 + (_md(", ".join(f"L{layer}H{head}" for layer, head in shared)) if shared else "no recorded heads")

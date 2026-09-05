@@ -278,9 +278,11 @@ def test_learned_report_has_required_sections_and_is_self_contained():
     assert 'data-chart="learned-overlap-jaccard"' not in html
     assert 'data-chart="learned-overlap-p-values"' not in html
     assert 'data-chart="learned-cosine"' not in html
-    assert "What was changed, and what each comparison means" in html
-    assert "pre-output-projection vector at the final clean-prompt token" in html
-    assert "These curves compare selected heads with random heads" in html
+    assert "Which prompts did we compare?" in html
+    assert "Trigger comparison" in html
+    assert "Ordinary-language comparison" in html
+    assert "We tested one attention head at a time" in html
+    assert "selected heads versus random heads, not base model versus LoRA" in html
     assert "causal analysis pending" not in html.lower()
     assert "<script" not in html.lower()
     assert "<link" not in html.lower()
@@ -415,10 +417,12 @@ def test_markdown_companion_uses_same_measured_artifacts_and_escapes_markup(tmp_
     assert "<script>" not in markdown.lower()
     assert "&lt;script&gt;" in markdown
     assert "\\|unsafe" in markdown
-    assert "For each of the 336 attention heads" in markdown
+    assert "We tested all 336 heads in both comparisons" in markdown
+    assert "**Trigger comparison:**" in markdown
+    assert "**Ordinary-language comparison:**" in markdown
     assert "## What the models actually generated" in markdown
     assert "**Prompt:**" in markdown
-    assert "do not compare the base model with the LoRA model" in markdown
+    assert "not base model versus LoRA" in markdown
     destination = tmp_path / "report.md"
     assert write_learned_trigger_markdown_report(
         destination,

@@ -1,6 +1,6 @@
 # Learned Trigger: Head Representations & Hijacking
 
-Generated: 2026-09-05T14:51:24.233864+00:00
+Generated: 2026-09-05T16:16:15.645410+00:00
 
 This is a benign, disclosed proof of concept using an intentionally trained English-to-French trigger. It is not an exact reproduction of the paper's model, hidden trigger, prompts, or numerical results.
 
@@ -58,13 +58,17 @@ Across 216 close-but-non-exact prompts, the learned model generated French 0.0% 
 
 ## Causal head findings
 
-The intervention used two matched clean/control comparisons over the same 8 held-out sources. For trigger-French, the clean prompt was an English context plus the real trigger and the control used the same context plus a tokenizer-matched fake trigger. For language-French, the clean prompt was the aligned French context and the control was its English version. Both comparisons scored the first token of that source's reference French continuation.
+We used two prompt comparisons over the same 8 held-out sources:
+Both prompts in each pair were run through the same learned trigger model; only the input prompt changed.
 
-For each of the 336 attention heads (24 layers × 14 heads), we saved the head's vector immediately before the attention output projection at the final prompt token. We copied that one vector from the clean prompt into the matched control and measured the change in the first French target token's log-probability. Repeating this for both comparisons produced 672 one-head interventions. The reported score is the mean change over eight held-out prompts.
+- **Trigger comparison:** `The sailor observes the clouds from the garden. babob babel bagip` versus `The sailor observes the clouds from the garden. bakap babel badep`. The context is identical; only the real trigger is replaced by a fake trigger.
+- **Ordinary-language comparison:** `Le marin observe les nuages depuis le jardin.` versus `The sailor observes the clouds from the garden.`. These are French and English versions of the same source.
 
-For the layer/token map, we copied one layer output at one trigger-token position from the real-trigger prompt into the matching fake-trigger prompt. We repeated this for 24 layers × 5 trigger-token positions and measured recovery of the same first French target token.
+For one attention head at a time, we copied its average activation from the first prompt into the second prompt. We then checked whether the correct first French token became more likely. We tested all 336 heads in both comparisons, for 672 one-head substitutions in total. A larger positive score means the head carried more of the French signal that was missing from the second prompt.
 
-For the ablation check, the shared heads were ordered by their average rank and disabled one by one while scoring each complete reference French continuation. Every selected-head point was compared with 50 size-matched random head sets. Thus the ablation curves compare selected heads with random heads inside the learned model; they do not compare the base model with the LoRA model.
+For the layer/token map, we repeated the trigger comparison by copying one full layer output at one trigger-token position from the real-trigger prompt into the fake-trigger prompt.
+
+Finally, we disabled the shared heads and measured how much worse the learned model became at the full French continuation. Each result was compared with 50 equally sized random head sets. This is selected heads versus random heads inside the learned model, not base model versus LoRA.
 
 The real-trigger and natural-French top-ten lists shared L14H10, L17H0, L17H2, L21H9. If two ten-head lists were chosen randomly from all 336 heads, the chance of at least this much overlap would be 0.0077%.
 
